@@ -1,0 +1,33 @@
+# ── Web framework ────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# ── Data sources ─────────────────────────────────────────────────────────────
+yfinance==0.2.44           # Primary: Yahoo Finance (no API key)
+pandas-datareader==0.10.0  # Fallback 1: Stooq price history (no API key)
+httpx==0.27.2              # Fallback 2: FMP free endpoints (no API key)
+
+# ── Data processing ──────────────────────────────────────────────────────────
+pandas==2.2.2
+numpy==1.26.4
+
+# ── Technical analysis ───────────────────────────────────────────────────────
+ta==0.11.0                 # SMA, EMA, RSI, MACD, Bollinger Bands
+
+# ── PDF generation ───────────────────────────────────────────────────────────
+reportlab==4.2.2
+
+# ── LLM client ───────────────────────────────────────────────────────────────
+groq==0.9.0
+
+# ── Web research ─────────────────────────────────────────────────────────────
+duckduckgo-search==6.2.6   # Free, no API key
+
+# ── Configuration & environment ──────────────────────────────────────────────
+pydantic-settings==2.4.0
+python-dotenv==1.0.1
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest==8.3.2
+pytest-asyncio==0.23.8
+httpx                      # also used by TestClient in FastAPI tests
