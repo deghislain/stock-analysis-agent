@@ -2,6 +2,7 @@
   "name": "stock-analysis-agent-frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Frontend for the Stock Analysis Agent — beginner-friendly stock reports.",
   "scripts": {
     "dev": "vite",
