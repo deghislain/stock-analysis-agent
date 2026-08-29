@@ -56,6 +56,15 @@ class Settings(BaseSettings):
 
     # ── Data layer ───────────────────────────────────────────────────────────
 
+    fmp_api_key: str = Field(
+        default="",
+        description=(
+            "API key for Financial Modeling Prep (FMP). "
+            "Required for the fundamentals fallback source. "
+            "Get a free key (no credit card) at https://financialmodelingprep.com/developer/docs."
+        ),
+    )
+
     data_cache_ttl_seconds: int = Field(
         default=300,
         description="How long (seconds) to cache fetched stock data in memory before re-fetching.",
