@@ -30,4 +30,4 @@ python-dotenv==1.0.1
 # ── Testing ──────────────────────────────────────────────────────────────────
 pytest==8.3.2
 pytest-asyncio==0.23.8
-httpx                      # also used by TestClient in FastAPI tests
+# httpx is already pinned above (line 8); the same install covers TestClient.
