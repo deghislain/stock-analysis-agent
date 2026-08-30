@@ -72,7 +72,7 @@ All variables are read from `.env` (copy from `.env.example`).
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `GROQ_API_KEY` | _(empty)_ | **Yes** | Groq API key for LLM summaries. Get one free at [console.groq.com](https://console.groq.com) |
-| `GROQ_MODEL` | `llama3-8b-8192` | No | Groq model ID |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | No | Groq model ID |
 | `DEBUG` | `false` | No | Verbose logging + detailed errors |
 | `CORS_ORIGINS` | `["http://localhost:5173"]` | No | Allowed frontend origins (JSON array) |
 | `PDF_OUTPUT_DIR` | `/tmp/stock_reports` | No | Where PDFs are stored temporarily |
