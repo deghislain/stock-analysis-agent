@@ -278,61 +278,61 @@ class TestFundamentalAnalyserHappyPath:
         base.update(info_overrides)
         return _make_stock_data(company_info=base, price_df=None)
 
-    def test_ticker_extracted_from_symbol_key(self):
-        """ticker field is populated from company_info['symbol']."""
-        r = self.fa.analyse(self._yahoo_sd())
+    def test_ticker_stored_from_caller_argument(self):
+        """ticker field is the uppercased value passed by the caller."""
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.ticker == "AAPL"
 
     def test_pe_ratio_yahoo_key(self):
         """trailingPE is mapped to pe_ratio."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.pe_ratio.value == 28.5
         assert r.pe_ratio.unit == "x"
 
     def test_eps_yahoo_key(self):
         """trailingEps is mapped to eps."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.eps.value == 6.43
 
     def test_pb_ratio_yahoo_key(self):
         """priceToBook is mapped to pb_ratio."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.pb_ratio.value == 45.2
 
     def test_debt_to_equity_normalised_from_yahoo_percentage(self):
         """debtToEquity=170 (Yahoo %) is normalised to 1.70x."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert round(r.debt_to_equity.value, 2) == 1.70
 
     def test_debt_to_equity_small_value_not_divided(self):
         """debtToEquity=1.5 (already a ratio) is not divided by 100."""
-        r = self.fa.analyse(self._yahoo_sd(debtToEquity=1.5))
+        r = self.fa.analyse("AAPL", self._yahoo_sd(debtToEquity=1.5))
         assert r.debt_to_equity.value == 1.5
 
     def test_profit_margin_fraction_to_percent(self):
         """profitMargins=0.2531 → 25.31%."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.profit_margin.value == 25.31
         assert r.profit_margin.unit == "%"
 
     def test_revenue_growth_fraction_to_percent(self):
         """revenueGrowth=0.051 → 5.1%."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.revenue_growth.value == 5.1
 
     def test_dividend_yield_fraction_to_percent(self):
         """dividendYield=0.0055 → 0.55%."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.dividend_yield.value == 0.55
 
     def test_no_warnings_when_all_data_present(self):
         """No warnings are produced when every metric is available."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert r.warnings == []
 
     def test_score_in_bounds(self):
         """score is between 0 and 100."""
-        r = self.fa.analyse(self._yahoo_sd())
+        r = self.fa.analyse("AAPL", self._yahoo_sd())
         assert 0 <= r.score <= 100
 
 
@@ -360,27 +360,27 @@ class TestFundamentalAnalyserFMPFallback:
 
     def test_pe_ratio_fmp_fallback(self):
         """peRatioTTM used when trailingPE absent."""
-        r = self.fa.analyse(self._fmp_sd())
+        r = self.fa.analyse("AAPL", self._fmp_sd())
         assert r.pe_ratio.value == 27.0
 
     def test_pb_ratio_fmp_fallback(self):
         """pbRatioTTM used when priceToBook absent."""
-        r = self.fa.analyse(self._fmp_sd())
+        r = self.fa.analyse("AAPL", self._fmp_sd())
         assert r.pb_ratio.value == 40.0
 
     def test_debt_to_equity_fmp_already_ratio(self):
         """debtToEquityRatioTTM=1.65 is kept as-is (already a ratio)."""
-        r = self.fa.analyse(self._fmp_sd())
+        r = self.fa.analyse("AAPL", self._fmp_sd())
         assert round(r.debt_to_equity.value, 2) == 1.65
 
     def test_profit_margin_fmp(self):
         """netProfitMarginTTM=0.241 → 24.1%."""
-        r = self.fa.analyse(self._fmp_sd())
+        r = self.fa.analyse("AAPL", self._fmp_sd())
         assert r.profit_margin.value == 24.1
 
     def test_eps_missing_produces_warning(self):
         """EPS has no FMP key → value=None and one warning."""
-        r = self.fa.analyse(self._fmp_sd())
+        r = self.fa.analyse("AAPL", self._fmp_sd())
         assert r.eps.value is None
         assert any("EPS" in w for w in r.warnings)
 
@@ -395,7 +395,7 @@ class TestFundamentalAnalyserMissingData:
 
     def test_all_metrics_none_when_both_dicts_empty(self):
         """Every metric value is None when company_info and financials are empty."""
-        r = self.fa.analyse(_make_stock_data(company_info={}, financials={}, price_df=None))
+        r = self.fa.analyse("AAPL", _make_stock_data(company_info={}, financials={}, price_df=None))
         assert r.pe_ratio.value is None
         assert r.eps.value is None
         assert r.pb_ratio.value is None
@@ -406,18 +406,18 @@ class TestFundamentalAnalyserMissingData:
 
     def test_seven_warnings_when_all_missing(self):
         """One warning per missing metric."""
-        r = self.fa.analyse(_make_stock_data(company_info={}, financials={}, price_df=None))
+        r = self.fa.analyse("AAPL", _make_stock_data(company_info={}, financials={}, price_df=None))
         assert len(r.warnings) == 7
 
     def test_score_is_neutral_when_no_metrics(self):
         """Score defaults to 50 (neutral) when no metrics are available."""
-        r = self.fa.analyse(_make_stock_data(company_info={}, financials={}, price_df=None))
+        r = self.fa.analyse("AAPL", _make_stock_data(company_info={}, financials={}, price_df=None))
         assert r.score == 50.0
 
-    def test_ticker_defaults_to_unknown(self):
-        """ticker is 'UNKNOWN' when company_info has no 'symbol' key."""
-        r = self.fa.analyse(_make_stock_data(company_info={}, financials={}, price_df=None))
-        assert r.ticker == "UNKNOWN"
+    def test_ticker_passed_through_to_result(self):
+        """ticker on the result is exactly the caller-supplied ticker (uppercased)."""
+        r = self.fa.analyse("aapl", _make_stock_data(company_info={}, financials={}, price_df=None))
+        assert r.ticker == "AAPL"
 
 
 class TestFundamentalScoring:

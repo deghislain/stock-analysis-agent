@@ -43,9 +43,9 @@ logger = get_logger(__name__)
 class FundamentalAnalyser:
     """Computes fundamental metrics from a ``StockData`` object."""
 
-    def analyse(self, stock_data: StockData) -> FundamentalResult:
+    def analyse(self, ticker: str, stock_data: StockData) -> FundamentalResult:
         """
-        Compute all seven fundamental metrics for the ticker in ``stock_data``.
+        Compute all seven fundamental metrics for ``ticker`` using ``stock_data``.
 
         Metrics that cannot be computed because source data is missing are
         returned with ``value=None`` and a warning is appended.  The scorer
@@ -54,7 +54,6 @@ class FundamentalAnalyser:
         """
         info = stock_data.company_info or {}
         fins = stock_data.financials or {}
-        ticker = stock_data.source_name  # used only for log context
         warnings: list[str] = []
 
         # ── Compute each metric ───────────────────────────────────────────────
@@ -83,7 +82,7 @@ class FundamentalAnalyser:
         )
 
         return FundamentalResult(
-            ticker=_extract_ticker(info),
+            ticker=ticker.upper().strip(),
             pe_ratio=pe_ratio,
             eps=eps,
             pb_ratio=pb_ratio,
@@ -312,12 +311,3 @@ def _coerce(value: object) -> float | None:
         return None
 
 
-def _extract_ticker(info: dict) -> str:
-    """
-    Return the ticker symbol from ``company_info`` if present, else ``"UNKNOWN"``.
-
-    Yahoo Finance stores it under ``"symbol"``; FMP also uses ``"symbol"``.
-    Falls back to ``"UNKNOWN"`` when neither source provides it — the caller
-    (``DataAgent``) will overwrite this with the user-supplied ticker.
-    """
-    return str(info.get("symbol", "UNKNOWN")).upper()
