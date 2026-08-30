@@ -299,9 +299,7 @@ def _to_list(series: pd.Series) -> list[Optional[float]]:
     """Convert a pandas Series to a list of ``Optional[float]``, mapping NaN → None."""
     result: list[Optional[float]] = []
     for v in series:
-        if isinstance(v, float) and math.isnan(v):
-            result.append(None)
-        elif v is None:
+        if v is None or (isinstance(v, float) and math.isnan(v)):
             result.append(None)
         else:
             result.append(float(v))
