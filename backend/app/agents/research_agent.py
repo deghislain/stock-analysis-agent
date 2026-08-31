@@ -3,12 +3,15 @@ Research agent — fetches recent news headlines for a ticker via DuckDuckGo.
 
 ``ResearchAgent.run(ticker=...)`` calls ``DDGS().text()`` with the query
 ``"{ticker} stock news"`` and returns up to ``max_results`` cleaned news
-items.  Each item is a plain dict with normalised keys:
+items.  Each item is a plain dict with normalised keys matching the
+``NewsItem`` schema defined in ``schemas/report.py``:
 
     title       : str  — headline text
     url         : str  — link to the full article
-    body        : str  — short snippet / description
+    date        : str  — publication date as an ISO date string (best-effort;
+                         empty string when DDG does not provide one)
     source      : str  — domain extracted from the URL (best-effort)
+    body        : str  — short snippet / description (for sentiment analysis)
 
 The agent never raises — network errors, rate-limits, and empty result sets
 are all returned as status="ok" with an empty ``news_items`` list plus a
@@ -120,10 +123,11 @@ def _clean_item(raw: dict) -> dict:
     """
     Normalise a raw DuckDuckGo result dict into the agent's output shape.
 
-    DuckDuckGo text results use these keys: ``title``, ``href``, ``body``.
-    This function maps ``href`` → ``url`` and adds a ``source`` field
-    extracted from the URL domain.  Items missing both title and body are
-    discarded (return value is an empty dict, filtered by the caller).
+    DuckDuckGo text results use these keys: ``title``, ``href``, ``body``,
+    and optionally ``date``.  This function maps ``href`` → ``url``, adds a
+    ``source`` field extracted from the URL domain, and normalises ``date``
+    to an ISO date string (``YYYY-MM-DD``).  Items missing both title and
+    body are discarded (return value is an empty dict, filtered by the caller).
     """
     title = (raw.get("title") or "").strip()
     url   = (raw.get("href")  or "").strip()
@@ -133,13 +137,37 @@ def _clean_item(raw: dict) -> dict:
         return {}
 
     source = _extract_domain(url)
+    date   = _normalise_date(raw.get("date") or "")
 
     return {
         "title":  title,
         "url":    url,
-        "body":   body,
+        "date":   date,
         "source": source,
+        "body":   body,
     }
+
+
+def _normalise_date(raw_date: str) -> str:
+    """
+    Return ``raw_date`` as an ISO date string (``YYYY-MM-DD``).
+
+    DuckDuckGo may return dates in various formats or leave the field absent.
+    This function attempts to parse the value and reformat it; if parsing
+    fails or the input is blank it returns an empty string rather than raising.
+    """
+    raw_date = raw_date.strip()
+    if not raw_date:
+        return ""
+    # Try common formats DDG uses: "2024-01-15", "Jan 15, 2024", etc.
+    from datetime import datetime as _dt
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return _dt.strptime(raw_date, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    # Last resort: return the raw string if it looks date-like, else empty.
+    return raw_date if len(raw_date) <= 20 else ""
 
 
 def _extract_domain(url: str) -> str:
