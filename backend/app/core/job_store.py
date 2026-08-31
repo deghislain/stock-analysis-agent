@@ -22,9 +22,9 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-# Sentinel object used in update_job() so that result=None can be written
-# explicitly (None is a valid value) while still allowing the parameter to be
-# omitted entirely.
+# Sentinel object used in update_job() so that None can be written explicitly
+# for both ``result`` and ``current_step`` while still allowing either to be
+# omitted entirely (leaving the existing value unchanged).
 _UNSET = object()
 
 
@@ -134,7 +134,7 @@ class JobStore:
         job_id: str,
         *,
         status: str | None = None,
-        current_step: str | None = None,
+        current_step: Any = _UNSET,
         result: Any = _UNSET,
         error: str | None = None,
     ) -> Job:
@@ -142,8 +142,9 @@ class JobStore:
         Update one or more fields on an existing job.
 
         Only the fields that are explicitly passed are changed; all others
-        keep their current values.  The special sentinel ``_UNSET`` is used
-        for ``result`` so that ``None`` can be written explicitly.
+        keep their current values.  The ``_UNSET`` sentinel is used for both
+        ``current_step`` and ``result`` so that ``None`` can be written
+        explicitly (e.g. to clear the step label after a job completes).
 
         Parameters
         ----------
@@ -152,7 +153,9 @@ class JobStore:
         status : str | None
             New status value, if provided.
         current_step : str | None
-            Step label for the ``"running"`` status, if provided.
+            Step label for the ``"running"`` status.  Pass ``None`` explicitly
+            to clear the label (e.g. when the job finishes or fails).
+            Omit the argument entirely to leave the existing value unchanged.
         result : Any
             Completed report payload, if provided.
         error : str | None
@@ -174,7 +177,7 @@ class JobStore:
                 raise KeyError(f"Job '{job_id}' not found in the store.")
             if status is not None:
                 job.status = status
-            if current_step is not None:
+            if current_step is not _UNSET:
                 job.current_step = current_step
             if result is not _UNSET:
                 job.result = result

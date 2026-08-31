@@ -7,11 +7,10 @@ without needing to install the package.
 Also stubs out optional third-party packages that may not be installed in the
 test environment (e.g. a bare Python 3.x without a project venv activated):
 
-  yfinance          — required by app/data/yahoo_finance.py at import time.
-                      Stubbed with a MagicMock so the module-level
-                      ``import yfinance as yf`` never raises ModuleNotFoundError.
-                      Individual tests patch ``app.data.yahoo_finance.yf.*``
-                      at the method level, so the stub is never called directly.
+  yfinance            — required by app/data/yahoo_finance.py at import time.
+  duckduckgo_search   — required by app/agents/research_agent.py at import time.
+  groq                — required by app/core/llm_client.py at import time.
+  ta                  — required by app/analysis/technical.py at import time.
 
 These stubs are installed into ``sys.modules`` *before* any test module is
 collected, which is why they must live here in conftest.py rather than inside
@@ -27,15 +26,39 @@ from unittest.mock import MagicMock
 # or from within the ``backend/`` directory itself.
 sys.path.insert(0, os.path.dirname(__file__))
 
-# ── Optional-dependency stubs ─────────────────────────────────────────────────
-# Only install the stub when the real package is absent — this avoids shadowing
-# a properly-installed package in environments that do have it.
 
-if "yfinance" not in sys.modules:
+def _stub_if_missing(module_name: str) -> None:
+    """Install a MagicMock into sys.modules for ``module_name`` if not importable."""
+    if module_name in sys.modules:
+        return
     try:
-        import yfinance  # noqa: F401
+        __import__(module_name)
     except ModuleNotFoundError:
-        # Build a MagicMock that satisfies ``import yfinance as yf`` and
-        # ``yf.Ticker(...)`` without any real network calls.
-        _yfinance_stub = MagicMock()
-        sys.modules["yfinance"] = _yfinance_stub
+        stub = MagicMock()
+        # Ensure sub-module attribute access also returns MagicMocks.
+        stub.__path__ = []
+        sys.modules[module_name] = stub
+
+
+# ── Optional-dependency stubs ─────────────────────────────────────────────────
+
+_stub_if_missing("yfinance")
+_stub_if_missing("duckduckgo_search")
+# duckduckgo_search.exceptions must be a real-ish module for ``from … import`` to work.
+if "duckduckgo_search.exceptions" not in sys.modules:
+    _exc_stub = MagicMock()
+    _exc_stub.DuckDuckGoSearchException = Exception
+    sys.modules["duckduckgo_search.exceptions"] = _exc_stub
+_stub_if_missing("groq")
+# groq._exceptions must expose the error classes llm_client.py imports.
+if "groq._exceptions" not in sys.modules:
+    _groq_exc_stub = MagicMock()
+    _groq_exc_stub.APIConnectionError = Exception
+    _groq_exc_stub.APIStatusError = Exception
+    _groq_exc_stub.APITimeoutError = Exception
+    _groq_exc_stub.GroqError = Exception
+    sys.modules["groq._exceptions"] = _groq_exc_stub
+# Note: ``ta`` (technical analysis library) is imported lazily inside
+# app/analysis/technical.py function bodies, so no stub is needed here.
+# Tests that exercise the real ``ta`` code are expected to be skipped /
+# fail gracefully when ``ta`` is not installed in the environment.
