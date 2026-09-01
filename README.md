@@ -265,6 +265,20 @@ location /api/analyse {
 Supported formats: standard US equity tickers (`AAPL`, `MSFT`) and
 multi-class shares (`BRK.B`, `BF.B`).
 
+The backend validates every ticker against this regex (applied after
+`.upper().strip()`):
+
+```
+^[A-Z0-9]{1,5}([.\-][A-Z]{1,2})?$
+```
+
+| Part | Meaning |
+|---|---|
+| `[A-Z0-9]{1,5}` | 1–5 alphanumeric characters (the base symbol) |
+| `([.\-][A-Z]{1,2})?` | optional dot or hyphen followed by 1–2 letters (share class suffix) |
+
+Examples: `AAPL`, `MSFT`, `BRK.B`, `BF.B`, `BF-B`
+
 **Not supported in v1:** international exchange suffixes (e.g. `ASML.AS`).
 A helper hint is shown beneath the ticker input field in the UI.
 
