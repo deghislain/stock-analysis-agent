@@ -1,7 +1,8 @@
 """
-Pydantic output schemas for the analysis layer (Sub-Task 3).
+Pydantic output schemas for the analysis layer (Sub-Task 3) and the API
+request/response layer (Sub-Task 5).
 
-Four models are defined here:
+Seven models are defined here:
 
     FundamentalResult  — output of FundamentalAnalyser.analyse()
     TechnicalResult    — output of TechnicalAnalyser.analyse()
@@ -10,7 +11,13 @@ Four models are defined here:
                          and recommendation; this is what the agent layer
                          assembles and passes to the report agent.
 
-All models are read-only (frozen) to prevent accidental mutation downstream.
+    AnalyseRequest     — body of ``POST /api/analyse``
+    AnalyseResponse    — response of ``POST /api/analyse``
+    ValidateResponse   — response of ``GET /api/validate/{ticker}``
+
+All analysis models are read-only (frozen) to prevent accidental mutation
+downstream.  The three API models are intentionally not frozen — they are
+short-lived request/response objects.
 """
 
 from __future__ import annotations
@@ -301,3 +308,72 @@ class AnalysisResult(BaseModel):
     """
 
     model_config = {"frozen": True}
+
+
+# ── API request / response schemas (Sub-Task 5) ───────────────────────────────
+
+
+class AnalyseRequest(BaseModel):
+    """
+    Request body for ``POST /api/analyse``.
+
+    The ticker is normalised (upper-cased and stripped) and validated against
+    the ticker regex in the route handler before this model is used.
+    """
+
+    ticker: str
+    """
+    Stock ticker symbol to analyse (e.g. ``"AAPL"``, ``"BRK.B"``).
+
+    Must match ``^[A-Z0-9]{1,5}([.\\-][A-Z]{1,2})?$`` after
+    ``.upper().strip()``.  The route handler raises HTTP 422 when validation
+    fails.
+    """
+
+
+class AnalyseResponse(BaseModel):
+    """
+    Response body for ``POST /api/analyse``.
+
+    Returned immediately after the job is created; the orchestrator runs
+    in the background via FastAPI ``BackgroundTasks``.
+    """
+
+    job_id: str
+    """UUID string that uniquely identifies the created analysis job."""
+
+    status: str
+    """
+    Initial job status — always ``"pending"`` at the moment of job creation.
+    """
+
+
+class ValidateResponse(BaseModel):
+    """
+    Response body for ``GET /api/validate/{ticker}``.
+
+    Always returns HTTP 200 — the caller (frontend) decides how to react based
+    on the ``valid`` flag.  Never raises 4xx for unknown tickers; 422 is only
+    raised when the ticker string fails the regex format check.
+    """
+
+    valid: bool
+    """
+    ``True`` when the ticker passes format validation *and* yfinance can
+    resolve it to a real instrument; ``False`` otherwise.
+    """
+
+    name: Optional[str] = None
+    """
+    Company or instrument name returned by yfinance (e.g. ``"Apple Inc."``).
+
+    Populated only when ``valid`` is ``True``; ``None`` otherwise.
+    """
+
+    reason: Optional[str] = None
+    """
+    Short human-readable explanation of why validation failed.
+
+    Populated only when ``valid`` is ``False``; ``None`` otherwise.
+    Examples: ``"Symbol not found"``, ``"Invalid ticker format"``.
+    """
