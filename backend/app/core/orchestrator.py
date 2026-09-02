@@ -8,12 +8,13 @@ one, and writes the assembled ``ReportPayload`` dict into the store when done.
 
 Pipeline steps (in order)
 ──────────────────────────
-  1. DataAgent       — fetch price history + fundamentals via source fallback chain
-  2. ResearchAgent   — fetch recent news headlines via DuckDuckGo
+  1. DataAgent        — fetch price history + fundamentals via source fallback chain
+  2. ResearchAgent    — fetch recent news headlines via DuckDuckGo
   3. FundamentalAgent — compute fundamental metrics + score
-  4. TechnicalAgent  — compute technical indicators + score
-  5. Sentiment       — classify headlines; score 0–100   (direct call, not an agent)
-  6. ReportAgent     — call Groq LLM for plain-language explanation + recommendation
+  4. TechnicalAgent   — compute technical indicators + score
+  5. Sentiment        — classify headlines; score 0–100  (direct call, not an agent)
+  6. ReportAgent      — call Groq LLM for plain-language explanation + recommendation
+  7. PDFGenerator     — render the completed ReportPayload to a PDF file
 
 Scoring & recommendation
 ────────────────────────
@@ -30,6 +31,9 @@ Error handling
   logs them as warnings and continues with neutral placeholder values so a
   partial report is always produced.
 
+  PDF generation failure is non-fatal: a warning is added to the payload and
+  ``pdf_path`` is left as ``None`` so the rest of the report remains usable.
+
 ReportPayload shape (assembled as a plain dict — mirrors ``schemas/report.py``)
 ────────────────────────────────────────────────────────────────────────────────
   job_id, ticker, generated_at, status, recommendation, rationale,
@@ -40,6 +44,7 @@ ReportPayload shape (assembled as a plain dict — mirrors ``schemas/report.py``
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -49,8 +54,10 @@ from app.agents.report_agent import ReportAgent
 from app.agents.research_agent import ResearchAgent
 from app.agents.technical_agent import TechnicalAgent
 from app.analysis.sentiment import SentimentAnalyser
+from app.config import settings
 from app.core.job_store import JobStore
 from app.logger import get_logger
+from app.report.pdf_generator import PDFGenerator
 from app.schemas.analysis import AnalysisResult
 
 if TYPE_CHECKING:
@@ -111,6 +118,7 @@ class Orchestrator:
         technical_agent:   TechnicalAgent    | None = None,
         report_agent:      ReportAgent       | None = None,
         sentiment_analyser: SentimentAnalyser | None = None,
+        pdf_generator:     type | None = None,
     ) -> None:
         self._store             = job_store
         self._data_agent        = data_agent        or DataAgent()
@@ -119,6 +127,9 @@ class Orchestrator:
         self._technical_agent   = technical_agent   or TechnicalAgent()
         self._report_agent      = report_agent      or ReportAgent()
         self._sentiment         = sentiment_analyser or SentimentAnalyser()
+        # Accept a class (or any callable) so tests can inject a fake.
+        # Defaults to the real PDFGenerator class.
+        self._pdf_generator     = pdf_generator     or PDFGenerator
 
     # ── Public entry point ────────────────────────────────────────────────────
 
@@ -234,7 +245,7 @@ class Orchestrator:
         warnings.extend(report_result.get("warnings", []))
 
         # ── Assemble ReportPayload dict ───────────────────────────────────────
-        return {
+        payload = {
             "job_id":                  job_id,
             "ticker":                  ticker,
             "generated_at":            datetime.now(timezone.utc).isoformat(),
@@ -253,6 +264,19 @@ class Orchestrator:
             "disclaimer":              _DISCLAIMER,
             "pdf_path":                None,
         }
+
+        # ── Step 7: PDF generation ────────────────────────────────────────────
+        await self._store.update_job(job_id, current_step="Generating PDF")
+        pdf_path = _build_pdf_path(ticker, job_id)
+        try:
+            self._pdf_generator.generate(payload, pdf_path)
+            payload["pdf_path"] = pdf_path
+        except Exception as exc:  # noqa: BLE001
+            warn = f"PDF generation failed: {exc}"
+            logger.warning(warn, extra={"ticker": ticker, "job_id": job_id})
+            payload["warnings"].append(warn)
+
+        return payload
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -283,3 +307,19 @@ def _score_to_recommendation(score: float) -> str:
     if score <= _SELL_THRESHOLD:
         return "Sell"
     return "Hold"
+
+
+def _build_pdf_path(ticker: str, job_id: str) -> str:
+    """
+    Return the absolute path where the PDF for this job should be written.
+
+    Format: ``{PDF_OUTPUT_DIR}/{ticker}_{job_id}.pdf``
+
+    The directory is created if it does not yet exist (belt-and-suspenders —
+    the lifespan startup hook normally handles creation, but this guards
+    against the generator being called in tests or scripts outside the server).
+    """
+    output_dir = settings.pdf_output_dir
+    os.makedirs(output_dir, exist_ok=True)
+    filename = f"{ticker}_{job_id}.pdf"
+    return os.path.join(output_dir, filename)

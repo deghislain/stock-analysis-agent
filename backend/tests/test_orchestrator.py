@@ -219,6 +219,23 @@ def _fake_sentiment_analyser():
     return sa
 
 
+class _FakePDFGenerator:
+    """
+    Minimal PDFGenerator stand-in for orchestrator tests.
+
+    Writes a tiny valid-ish PDF header so ``os.path.isfile()`` checks pass,
+    without importing reportlab (which may not be available under Python 3.10).
+    """
+    @classmethod
+    def generate(cls, payload: dict, output_path: str) -> str:
+        import os
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "wb") as f:
+            f.write(b"%PDF-1.4 fake\n")
+        payload["pdf_path"] = output_path
+        return output_path
+
+
 def _make_orchestrator(**overrides) -> tuple[Orchestrator, JobStore]:
     """Build an Orchestrator with all agents faked out; return (orch, store)."""
     store = JobStore()
@@ -229,6 +246,7 @@ def _make_orchestrator(**overrides) -> tuple[Orchestrator, JobStore]:
         technical_agent=_fake_technical_agent(),
         report_agent=_fake_report_agent(),
         sentiment_analyser=_fake_sentiment_analyser(),
+        pdf_generator=_FakePDFGenerator,
     )
     defaults.update(overrides)
     return Orchestrator(store, **defaults), store
@@ -273,11 +291,14 @@ class TestOrchestratorHappyPath:
         await orch.run("aapl", "j4")
         assert store.get_job("j4").result["ticker"] == "AAPL"
 
-    async def test_pdf_path_is_none(self):
+    async def test_pdf_path_is_set_after_generation(self):
+        """pdf_path must be a non-None string ending in .pdf after a successful run."""
         orch, store = _make_orchestrator()
         store.create_job("j5")
         await orch.run("AAPL", "j5")
-        assert store.get_job("j5").result["pdf_path"] is None
+        pdf_path = store.get_job("j5").result["pdf_path"]
+        assert pdf_path is not None
+        assert pdf_path.endswith(".pdf")
 
     async def test_disclaimer_present_and_non_empty(self):
         orch, store = _make_orchestrator()
@@ -496,3 +517,94 @@ class TestWarningDeduplication:
         await orch.run("AAPL", "wd1")
         result = store.get_job("wd1").result
         assert result["warnings"].count(duplicate_warn) == 1
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PDF generation step
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestOrchestratorPDFGeneration:
+
+    async def test_pdf_path_contains_ticker_and_job_id(self):
+        """The output path must embed both ticker and job_id."""
+        orch, store = _make_orchestrator()
+        store.create_job("pdf1")
+        await orch.run("AAPL", "pdf1")
+        pdf_path = store.get_job("pdf1").result["pdf_path"]
+        assert "AAPL" in pdf_path
+        assert "pdf1" in pdf_path
+
+    async def test_pdf_file_exists_on_disk(self):
+        """The generated PDF file must actually exist after the pipeline runs."""
+        import os
+        orch, store = _make_orchestrator()
+        store.create_job("pdf2")
+        await orch.run("AAPL", "pdf2")
+        pdf_path = store.get_job("pdf2").result["pdf_path"]
+        assert pdf_path is not None
+        assert os.path.isfile(pdf_path)
+        os.unlink(pdf_path)  # clean up
+
+    async def test_pdf_generation_failure_is_non_fatal(self):
+        """A crashing PDFGenerator must not cause the job to error."""
+        class _BrokenPDF:
+            @classmethod
+            def generate(cls, payload, output_path):
+                raise RuntimeError("disk full")
+
+        orch, store = _make_orchestrator(pdf_generator=_BrokenPDF)
+        store.create_job("pdf3")
+        await orch.run("AAPL", "pdf3")
+        assert store.get_job("pdf3").status == "complete"
+
+    async def test_pdf_generation_failure_adds_warning(self):
+        """A crashing PDFGenerator must add a warning to the payload."""
+        class _BrokenPDF:
+            @classmethod
+            def generate(cls, payload, output_path):
+                raise RuntimeError("disk full")
+
+        orch, store = _make_orchestrator(pdf_generator=_BrokenPDF)
+        store.create_job("pdf4")
+        await orch.run("AAPL", "pdf4")
+        warnings = store.get_job("pdf4").result["warnings"]
+        assert any("PDF" in w for w in warnings)
+
+    async def test_pdf_path_none_when_generation_fails(self):
+        """pdf_path must remain None when PDF generation raises."""
+        class _BrokenPDF:
+            @classmethod
+            def generate(cls, payload, output_path):
+                raise RuntimeError("disk full")
+
+        orch, store = _make_orchestrator(pdf_generator=_BrokenPDF)
+        store.create_job("pdf5")
+        await orch.run("AAPL", "pdf5")
+        assert store.get_job("pdf5").result["pdf_path"] is None
+
+    async def test_pdf_step_label_observed(self):
+        """'Generating PDF' must appear as a current_step during the pipeline."""
+        observed_steps: list[str] = []
+        store = JobStore()
+        original_update = store.update_job
+
+        async def _capturing(job_id, **kwargs):
+            step = kwargs.get("current_step")
+            if step:
+                observed_steps.append(step)
+            return await original_update(job_id, **kwargs)
+
+        store.update_job = _capturing  # type: ignore[method-assign]
+        orch = Orchestrator(
+            store,
+            data_agent=_fake_data_agent(),
+            research_agent=_fake_research_agent(),
+            fundamental_agent=_fake_fundamental_agent(),
+            technical_agent=_fake_technical_agent(),
+            report_agent=_fake_report_agent(),
+            sentiment_analyser=_fake_sentiment_analyser(),
+        )
+        store.create_job("pdf6")
+        await orch.run("AAPL", "pdf6")
+        assert any("PDF" in s or "pdf" in s.lower() for s in observed_steps)
