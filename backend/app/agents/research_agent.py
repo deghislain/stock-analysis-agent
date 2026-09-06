@@ -29,8 +29,8 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from duckduckgo_search import DDGS
-from duckduckgo_search.exceptions import DuckDuckGoSearchException
+from ddgs import DDGS
+from ddgs.exceptions import DDGSException
 
 from app.agents.base_agent import BaseAgent
 from app.logger import get_logger
