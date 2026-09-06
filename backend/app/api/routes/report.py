@@ -155,12 +155,12 @@ async def get_report_pdf(
 
     # Derive a clean filename for the Content-Disposition header.
     filename = os.path.basename(pdf_path)
-
+    
     logger.info(
         "Serving PDF download",
-        extra={"job_id": job_id, "filename": filename},
+        extra={"job_id": job_id, "file_name": filename},
     )
-
+    
     return FileResponse(
         path=pdf_path,
         media_type="application/pdf",

@@ -30,7 +30,7 @@ services:
       - "8000:8000"
     volumes:
       # Persist generated PDFs across container restarts.
-      - ./pdf_reports:/app/pdf_reports
+      - ./backend/app/pdf_reports:/app/pdf_reports
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
