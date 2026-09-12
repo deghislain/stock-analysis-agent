@@ -1,0 +1,32 @@
+# ── Python build artifacts ────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environment ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Tests & coverage ──────────────────────────────────────────────────────────
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ── PDF reports (runtime output — not needed in image) ────────────────────────
+app/pdf_reports/
+
+# ── Development & editor files ────────────────────────────────────────────────
+.env
+.env.*
+*.log
+.DS_Store
+.git/
+.gitignore

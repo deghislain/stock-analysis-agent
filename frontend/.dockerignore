@@ -1,0 +1,15 @@
+# ── Node modules (reinstalled during build) ──────────────────────────────────
+node_modules/
+
+# ── Vite build output (produced inside the container) ────────────────────────
+dist/
+
+# ── Development & editor files ───────────────────────────────────────────────
+.env
+.env.*
+*.log
+.DS_Store
+.git/
+.gitignore
+
+# ── nginx config is copied explicitly — no need to exclude anything else here

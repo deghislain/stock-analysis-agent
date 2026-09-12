@@ -24,9 +24,11 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY app/ ./app/
 
 # ── Create the PDF output directory at image build time ──────────────────────
-# The lifespan event also creates it at runtime, but having it pre-created
-# avoids a race condition if the volume mount is slow to attach.
-RUN mkdir -p /tmp/stock_reports
+# /app/pdf_reports is the path used when running via Docker Compose
+# (PDF_OUTPUT_DIR is overridden to /app/pdf_reports in docker-compose.yml).
+# /tmp/stock_reports is the bare-metal default from config.py.
+# Both are created so the app starts cleanly in either environment.
+RUN mkdir -p /app/pdf_reports /tmp/stock_reports
 
 # ── Expose & run ─────────────────────────────────────────────────────────────
 EXPOSE 8000

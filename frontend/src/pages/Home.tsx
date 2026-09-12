@@ -45,31 +45,31 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        {/* ── Hero card ────────────────────────────────────────────────── */}
-        <div className="card text-center space-y-3">
-          {/* Title */}
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-            Stock Analysis Agent
-          </h1>
+      <div className="w-full max-w-md space-y-4">
 
-          {/* Subtitle + mandatory disclaimer (plan requirement) */}
-          <p className="text-sm text-gray-500 leading-relaxed">
-            Enter a stock ticker to get an AI-powered fundamental, technical, and
-            sentiment analysis report.
-            <br />
-            <span className="disclaimer">
+        {/* ── Hero + input — single cohesive card ──────────────────────── */}
+        <div className="card space-y-6">
+
+          {/* Title block */}
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              Stock Analysis Agent
+            </h1>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Enter a stock ticker to receive an AI-powered fundamental,
+              technical, and sentiment report.
+            </p>
+            {/* Mandatory disclaimer — hero subtitle (plan requirement) */}
+            <p className="disclaimer">
               For informational purposes only. Not financial advice.
-            </span>
-          </p>
-        </div>
+            </p>
+          </div>
 
-        {/* ── Ticker entry card ─────────────────────────────────────────── */}
-        <div className="card space-y-4">
-          <TickerInput
-            onSubmit={handleSubmit}
-            disabled={isSubmitting}
-          />
+          {/* Divider */}
+          <hr className="border-gray-100" />
+
+          {/* Ticker input */}
+          <TickerInput onSubmit={handleSubmit} disabled={isSubmitting} />
 
           {/* Submitting feedback */}
           {isSubmitting && (
@@ -79,10 +79,11 @@ export default function Home() {
           )}
         </div>
 
-        {/* ── Footer note ──────────────────────────────────────────────── */}
+        {/* ── Timing hint ──────────────────────────────────────────────── */}
         <p className="text-center disclaimer">
           Analysis typically takes 20–40 seconds.
         </p>
+
       </div>
     </main>
   )

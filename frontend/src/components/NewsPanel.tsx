@@ -50,12 +50,12 @@ export default function NewsPanel({ newsItems, newsSummary }: NewsPanelProps) {
         <ul className="divide-y divide-gray-100 -mx-2">
           {newsItems.map((item, i) => (
             <li key={i} className="px-2 py-3">
-              {/* Title — external link */}
+              {/* Title — external link; clamped to 2 lines on small screens */}
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium text-blue-600 hover:underline leading-snug"
+                className="news-title text-sm font-medium text-blue-600 hover:underline"
               >
                 {item.title}
               </a>

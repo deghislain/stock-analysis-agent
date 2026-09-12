@@ -71,10 +71,12 @@ export default function TechnicalPanel({ result, explanation }: TechnicalPanelPr
     warnings,
   } = result
 
-  // Derive a volume series from the technical result if present; otherwise empty.
-  // The backend TechnicalResult does not carry raw volume — we fall back to an
-  // empty array so VolumeChart renders without bars rather than throwing.
+  // The backend TechnicalResult does not carry raw volume data.
+  // We keep the VolumeChart component available for future use but hide the
+  // entire sub-section when there is no data to show — a blank chart with all
+  // null bars is not useful to beginners.
   const volumes: (number | null)[] = Array(dates.length).fill(null)
+  const hasVolumeData = volumes.some((v) => v !== null)
 
   const snapshot: SnapshotRow[] = [
     { label: 'Close', value: fmt(latest_close, true), hint: 'Most recent closing price' },
@@ -100,9 +102,7 @@ export default function TechnicalPanel({ result, explanation }: TechnicalPanelPr
 
       {/* ── Price chart ──────────────────────────────────────────────────── */}
       <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-          Price History
-        </p>
+        <p className="chart-label">Price History</p>
         <PriceChart
           dates={dates}
           closePrices={close_prices}
@@ -111,23 +111,23 @@ export default function TechnicalPanel({ result, explanation }: TechnicalPanelPr
         />
       </div>
 
-      {/* ── Volume chart ─────────────────────────────────────────────────── */}
-      <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-          Trading Volume
-        </p>
-        <VolumeChart
-          dates={dates}
-          volumes={volumes}
-          closePrices={close_prices}
-        />
-      </div>
+      {/* ── Volume chart — only rendered when data is available ──────────── */}
+      {hasVolumeData && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            Trading Volume
+          </p>
+          <VolumeChart
+            dates={dates}
+            volumes={volumes}
+            closePrices={close_prices}
+          />
+        </div>
+      )}
 
       {/* ── RSI chart ────────────────────────────────────────────────────── */}
       <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-          RSI (14)
-        </p>
+        <p className="chart-label">RSI (14)</p>
         <RSIChart dates={dates} rsi={rsi_14.values} />
       </div>
 
@@ -141,7 +141,7 @@ export default function TechnicalPanel({ result, explanation }: TechnicalPanelPr
               <th className="pb-2">Description</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-100">
             {snapshot.map((row) => (
               <tr key={row.label}>
                 <td className="py-2 pr-4 font-medium text-gray-800 whitespace-nowrap">

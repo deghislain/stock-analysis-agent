@@ -97,30 +97,37 @@ export default function Report() {
   const pdfUrl = getPdfUrl(report.job_id)
 
   return (
-    <main className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="mx-auto max-w-3xl space-y-6">
+    <div className="min-h-screen bg-gray-50">
 
-        {/* ── Header row ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+      {/* ── Sticky top nav bar ────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
+        <div className="mx-auto max-w-3xl flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-lg font-bold text-gray-900 font-mono tracking-wide truncate">
               {report.ticker}
-            </h1>
-            <p className="text-sm text-gray-400">
-              Report generated {new Date(report.generated_at).toLocaleString()}
-            </p>
+            </span>
+            <span className="hidden sm:block text-xs text-gray-400">
+              {new Date(report.generated_at).toLocaleString()}
+            </span>
           </div>
           <Link
             to="/"
-            className="text-sm text-brand-600 hover:underline"
+            className="shrink-0 rounded-md px-3 py-1.5 text-sm font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors"
           >
             ← New analysis
           </Link>
         </div>
+      </header>
+
+      <main className="mx-auto max-w-3xl space-y-6 px-4 py-8">
 
         {/* ── Data sources + warnings ───────────────────────────────────── */}
-        <DataSourcesBadge sources={report.sources_used} />
-        <WarningFlags warnings={report.warnings} />
+        {(report.sources_used.length > 0 || report.warnings.length > 0) && (
+          <div className="space-y-2">
+            <DataSourcesBadge sources={report.sources_used} />
+            <WarningFlags warnings={report.warnings} />
+          </div>
+        )}
 
         {/* ── Executive summary ─────────────────────────────────────────── */}
         <ExecutiveSummary
@@ -159,7 +166,7 @@ export default function Report() {
             download
             className="inline-block rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 transition-colors"
           >
-            Download PDF
+            ↓ Download PDF
           </a>
           {/* Mandatory disclaimer in the PDF download area (plan requirement) */}
           <p className="disclaimer">
@@ -167,7 +174,7 @@ export default function Report() {
           </p>
         </div>
 
-      </div>
-    </main>
+      </main>
+    </div>
   )
 }

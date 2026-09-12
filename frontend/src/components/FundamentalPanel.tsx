@@ -89,7 +89,7 @@ export default function FundamentalPanel({ result, explanation }: FundamentalPan
               <th className="pb-2">What it means</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-100">
             {metrics.map((m) => (
               <tr key={m.label} className="align-top">
                 <td className="py-2 pr-4 font-medium text-gray-800 whitespace-nowrap">
