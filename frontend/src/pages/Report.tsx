@@ -20,7 +20,6 @@
  *   7. PDF download row + disclaimer (plan requirement)
  */
 
-import { useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAnalysis } from '../hooks/useAnalysis'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -38,17 +37,17 @@ export default function Report() {
   const { jobId } = useParams<{ jobId: string }>()
   const navigate = useNavigate()
 
-  const { status, currentStep, report, error, isLoading } = useAnalysis()
+  // Pass jobId from the URL directly into useAnalysis so polling starts
+  // immediately when this page mounts — even though the mutation that created
+  // the job ran inside the Home page's hook instance, not this one.
+  const { status, currentStep, report, error, isLoading } = useAnalysis(jobId)
 
-  // If the user lands directly on /report/:jobId (e.g. shared link or page
-  // refresh) and there is no active job in the hook, kick off a reload to the
-  // home page so they can start a fresh analysis. A jobId in the URL is only
-  // meaningful within the same browser session.
-  useEffect(() => {
-    if (!jobId) {
-      navigate('/', { replace: true })
-    }
-  }, [jobId, navigate])
+  // Guard: jobId is guaranteed by React Router's <Route path="/report/:jobId">
+  // so this branch only fires on a malformed direct URL with no param.
+  if (!jobId) {
+    navigate('/', { replace: true })
+    return null
+  }
 
   // ── Loading state ──────────────────────────────────────────────────────────
 

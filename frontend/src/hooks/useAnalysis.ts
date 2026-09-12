@@ -23,13 +23,22 @@
  *   isSubmitting    — true while the POST /api/analyse call is in flight
  *   isLoading       — true while polling is in flight AND not yet complete
  *
+ * Parameters
+ * ──────────
+ *   initialJobId  — optional UUID to seed the hook with an already-running job.
+ *                   Used by Report.tsx, which reads the jobId from the URL param
+ *                   on mount and needs to start polling immediately without
+ *                   going through the mutation first.
+ *
  * Usage
  * ─────
- *   const { start, status, currentStep, report, error, isSubmitting } =
- *     useAnalysis()
- *
- *   // On "Generate Report" click:
+ *   // Home.tsx — start a new job via the mutation:
+ *   const { start, jobId } = useAnalysis()
  *   start('AAPL')
+ *
+ *   // Report.tsx — resume polling for an existing job from the URL:
+ *   const { jobId } = useParams()
+ *   const { status, report } = useAnalysis(jobId)
  */
 
 import { useState } from 'react'
@@ -55,14 +64,16 @@ function isTerminal(status: string | null | undefined): boolean {
 /**
  * Manages the full analysis lifecycle: submission → polling → completion.
  *
- * No arguments are required — the ticker is passed to `start()` at call time.
+ * @param initialJobId  Seed the hook with an already-running job ID (e.g. from
+ *                      a URL param on the Report page).  When provided the hook
+ *                      skips the mutation and begins polling immediately.
  */
-export function useAnalysis() {
+export function useAnalysis(initialJobId?: string) {
   const queryClient = useQueryClient()
 
-  // jobId is the link between the mutation result and the polling query.
-  // null means no job has been started in this session.
-  const [jobId, setJobId] = useState<string | null>(null)
+  // jobId drives the polling query.
+  // Seeded from initialJobId so Report.tsx can resume polling after navigation.
+  const [jobId, setJobId] = useState<string | null>(initialJobId ?? null)
 
   // ── Mutation: POST /api/analyse ───────────────────────────────────────────
 
