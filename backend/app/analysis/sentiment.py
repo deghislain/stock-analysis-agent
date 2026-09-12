@@ -2,30 +2,36 @@
 Sentiment analysis module.
 
 ``SentimentAnalyser.analyse(ticker, news_items)`` classifies each news
-headline as Positive, Neutral, or Negative using a keyword-matching
-approach — no external model or API call is needed.
+headline as Positive, Neutral, or Negative.
+
+When the ``transformers`` package is installed and ``ProsusAI/finbert``
+can be loaded, each headline is scored by FinBERT — a BERT model
+fine-tuned on financial news text.  This gives context-aware sentiment
+that handles mixed headlines (e.g. "record high despite concerns") far
+better than keyword matching.
+
+When ``transformers`` is not installed, or the model cannot be loaded,
+the module falls back to the original keyword-matching approach
+transparently.  No exception is raised in either case.
 
 Each news item is a dict that may contain any of these text fields:
     ``title``, ``body``, ``snippet``, ``description``
 
-The text is lowercased and scanned against two word-lists:
+FinBERT scoring
+───────────────
+FinBERT returns one of three labels per text: ``positive``, ``neutral``,
+``negative``.  Per-headline polarity:
+    positive → +1,  neutral → 0,  negative → -1
 
-    POSITIVE_WORDS  — growth, beat, record, upgrade, bullish, …
-    NEGATIVE_WORDS  — loss, miss, downgrade, recall, lawsuit, …
-
-Scoring
-───────
-Per headline:
+Keyword-matching fallback scoring
+──────────────────────────────────
     +1 point for every positive keyword hit
     -1 point for every negative keyword hit
 
-Net polarity = sum of all per-headline net scores.
-
-Overall score (0–100):
+Overall score (0–100) for both paths:
     score = clamp(50 + net_polarity * SCALE_FACTOR, 0, 100)
 
-Where SCALE_FACTOR = 5 (each net unit of sentiment moves the score ±5 pts).
-This keeps the range usable even for small news sets (< 10 items).
+Where SCALE_FACTOR = 5.
 
 Label thresholds:
     score >= 60  → "Positive"
@@ -43,7 +49,14 @@ logger = get_logger(__name__)
 # How much each net sentiment unit shifts the score away from 50.
 _SCALE_FACTOR = 5
 
+# Module-level cache for the FinBERT pipeline.
+# Populated lazily on first call to _finbert_score(); stays None if
+# transformers is not installed or model loading fails.
+_finbert_pipeline = None
+_finbert_checked   = False   # ensures we only attempt loading once
+
 # ── Keyword lists ─────────────────────────────────────────────────────────────
+# Used as the fallback when FinBERT is unavailable.
 # Kept intentionally broad so they catch common financial headlines without
 # false-precision.  Ordered alphabetically for easy maintenance.
 
@@ -71,7 +84,7 @@ _NEGATIVE_WORDS: frozenset[str] = frozenset({
 
 
 class SentimentAnalyser:
-    """Classifies news headlines with keyword matching to produce a sentiment score."""
+    """Classifies news headlines with FinBERT (or keyword fallback) to produce a sentiment score."""
 
     def analyse(self, ticker: str, news_items: list[dict]) -> SentimentResult:
         """
@@ -90,8 +103,7 @@ class SentimentAnalyser:
 
         for item in news_items:
             text = _extract_text(item)
-            pos_hits, neg_hits = _score_text(text)
-            net = pos_hits - neg_hits
+            net = _score_item(text)
 
             if net > 0:
                 positive_count += 1
@@ -146,6 +158,81 @@ def _extract_text(item: dict) -> str:
         if val and isinstance(val, str):
             parts.append(val.lower())
     return " ".join(parts)
+
+
+def _score_item(text: str) -> int:
+    """
+    Return a polarity integer (+1, 0, or -1) for a single headline text.
+
+    Uses FinBERT when available; falls back to keyword matching otherwise.
+    Empty text always returns 0 (neutral).
+    """
+    if not text:
+        return 0
+
+    finbert = _get_finbert()
+    if finbert is not None:
+        return _finbert_score(finbert, text)
+
+    pos_hits, neg_hits = _score_text(text)
+    net = pos_hits - neg_hits
+    # Clamp to -1 / 0 / +1 to keep the same polarity scale as FinBERT.
+    if net > 0:
+        return 1
+    if net < 0:
+        return -1
+    return 0
+
+
+def _get_finbert():
+    """
+    Return the FinBERT pipeline, loading it once on first call.
+
+    Returns ``None`` if ``transformers`` is not installed or the model
+    cannot be loaded for any reason (network unavailable, disk full, etc.).
+    The result is cached so the model is only loaded once per process.
+    """
+    global _finbert_pipeline, _finbert_checked
+    if _finbert_checked:
+        return _finbert_pipeline
+
+    _finbert_checked = True
+    try:
+        from transformers import pipeline as hf_pipeline  # type: ignore[import]
+        _finbert_pipeline = hf_pipeline(
+            "text-classification",
+            model="ProsusAI/finbert",
+        )
+        logger.info("FinBERT sentiment model loaded successfully")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "FinBERT unavailable — falling back to keyword sentiment",
+            extra={"reason": str(exc)},
+        )
+        _finbert_pipeline = None
+
+    return _finbert_pipeline
+
+
+def _finbert_score(finbert_pipeline, text: str) -> int:
+    """
+    Run ``text`` through the FinBERT pipeline and return +1, 0, or -1.
+
+    FinBERT truncates inputs longer than 512 tokens internally.
+    Returns 0 (neutral) if the pipeline raises for any reason.
+    """
+    try:
+        # pipeline() returns a list of dicts: [{"label": "positive", "score": 0.98}]
+        result = finbert_pipeline(text[:512], truncation=True)
+        label: str = result[0]["label"].lower()
+        if label == "positive":
+            return 1
+        if label == "negative":
+            return -1
+        return 0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("FinBERT inference failed for item", extra={"error": str(exc)})
+        return 0
 
 
 def _score_text(text: str) -> tuple[int, int]:

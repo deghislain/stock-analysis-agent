@@ -44,6 +44,7 @@ ReportPayload shape (assembled as a plain dict — mirrors ``schemas/report.py``
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -199,19 +200,21 @@ class Orchestrator:
         news_items: list[dict] = research_result.get("news_items", [])
         warnings.extend(research_result.get("warnings", []))
 
-        # ── Step 3: FundamentalAgent ──────────────────────────────────────────
-        await self._store.update_job(job_id, current_step="Analysing fundamentals")
-        fund_result = await self._fundamental_agent.run(ticker=ticker, stock_data=stock_data)
-        fundamental_result: FundamentalResult = fund_result["fundamental_result"]
-        if fund_result.get("status") == "error":
-            warnings.append(f"Fundamental analysis error: {fund_result.get('error', 'unknown')}")
+        # ── Steps 3 & 4: FundamentalAgent + TechnicalAgent (concurrent) ───────
+        # Both agents take the same stock_data input and produce independent
+        # outputs, so they are run concurrently with asyncio.gather().
+        await self._store.update_job(job_id, current_step="Analysing fundamentals & technicals")
+        fund_task, tech_task = await asyncio.gather(
+            self._fundamental_agent.run(ticker=ticker, stock_data=stock_data),
+            self._technical_agent.run(ticker=ticker, stock_data=stock_data),
+        )
+        fundamental_result: FundamentalResult = fund_task["fundamental_result"]
+        if fund_task.get("status") == "error":
+            warnings.append(f"Fundamental analysis error: {fund_task.get('error', 'unknown')}")
 
-        # ── Step 4: TechnicalAgent ────────────────────────────────────────────
-        await self._store.update_job(job_id, current_step="Analysing technical indicators")
-        tech_result = await self._technical_agent.run(ticker=ticker, stock_data=stock_data)
-        technical_result: TechnicalResult = tech_result["technical_result"]
-        if tech_result.get("status") == "error":
-            warnings.append(f"Technical analysis error: {tech_result.get('error', 'unknown')}")
+        technical_result: TechnicalResult = tech_task["technical_result"]
+        if tech_task.get("status") == "error":
+            warnings.append(f"Technical analysis error: {tech_task.get('error', 'unknown')}")
 
         # Propagate per-analyser warnings.
         warnings.extend(getattr(fundamental_result, "warnings", []))
