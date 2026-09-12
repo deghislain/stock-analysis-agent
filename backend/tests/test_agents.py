@@ -773,11 +773,15 @@ class TestBuildPrompt:
     def test_response_format_section(self):
         assert "RESPONSE FORMAT" in self._prompt()
 
-    def test_all_five_json_keys_mentioned(self):
+    def test_all_json_keys_mentioned(self):
         p = self._prompt()
         for key in ("executive_summary", "recommendation", "rationale",
-                    "fundamental_explanation", "technical_explanation"):
+                    "fundamental_explanation", "technical_explanation",
+                    "news_summary"):
             assert key in p
+
+    def test_news_section_header_in_prompt(self):
+        assert "RECENT NEWS HEADLINES" in self._prompt()
 
     def test_buy_hold_sell_listed(self):
         p = self._prompt()

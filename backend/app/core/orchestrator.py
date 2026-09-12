@@ -244,7 +244,10 @@ class Orchestrator:
             sources_used=sources_used,
             warnings=list(dict.fromkeys(warnings)),  # deduplicate, preserve order
         )
-        report_result = await self._report_agent.run(analysis_result=analysis_result)
+        report_result = await self._report_agent.run(
+            analysis_result=analysis_result,
+            news_items=news_items,
+        )
         warnings.extend(report_result.get("warnings", []))
 
         # ── Assemble ReportPayload dict ───────────────────────────────────────
@@ -260,6 +263,7 @@ class Orchestrator:
             "technical_result":        technical_result,
             "sentiment_result":        sentiment_result,
             "news_items":              news_items,
+            "news_summary":            report_result.get("news_summary", ""),
             "fundamental_explanation": report_result.get("fundamental_explanation", ""),
             "technical_explanation":   report_result.get("technical_explanation", ""),
             "sources_used":            sources_used,

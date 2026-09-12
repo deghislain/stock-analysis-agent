@@ -72,10 +72,52 @@ _CONTENT_W = _PAGE_W - 2 * _MARGIN  # usable width for tables
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# Mapping of Unicode characters that exist outside the Helvetica Type-1 Latin-1
+# character set to their nearest ASCII equivalents.
+# ReportLab renders any unmapped glyph as a filled black square, so any
+# character the LLM might produce that is not in this table must be added here.
+_UNICODE_REPLACEMENTS: list[tuple[str, str]] = [
+    # Dashes
+    ("\u2013", "-"),    # en-dash
+    ("\u2014", " - "),  # em-dash
+    ("\u2012", "-"),    # figure dash
+    ("\u2011", "-"),    # non-breaking hyphen
+    ("\u2010", "-"),    # hyphen (Unicode)
+    # Quotes
+    ("\u2018", "'"),    # left single quotation mark
+    ("\u2019", "'"),    # right single quotation mark / apostrophe
+    ("\u201A", "'"),    # single low-9 quotation mark
+    ("\u201C", '"'),    # left double quotation mark
+    ("\u201D", '"'),    # right double quotation mark
+    ("\u201E", '"'),    # double low-9 quotation mark
+    # Ellipsis and spaces
+    ("\u2026", "..."),  # horizontal ellipsis
+    ("\u00A0", " "),    # non-breaking space
+    ("\u202F", " "),    # narrow no-break space
+    # Miscellaneous symbols the LLM may emit
+    ("\u00D7", "x"),    # multiplication sign (used in "22x P/E")
+    ("\u2022", "*"),    # bullet
+    ("\u2714", "v"),    # check mark
+    ("\u2248", "~"),    # almost equal to
+]
+
+
+def _sanitise(text: str) -> str:
+    """
+    Replace characters outside the Helvetica Latin-1 glyph set with ASCII equivalents.
+
+    ReportLab renders any codepoint it cannot find in the active font as a
+    filled black rectangle.  All LLM-generated text passes through this function
+    before reaching a ``Paragraph`` flowable so the PDF is always clean.
+    """
+    for char, replacement in _UNICODE_REPLACEMENTS:
+        text = text.replace(char, replacement)
+    return text
+
 
 def _p(text: str, style_key: str) -> Paragraph:
-    """Return a ``Paragraph`` flowable with XML-escaped *text* and *style_key*."""
-    return Paragraph(html.escape(str(text)), STYLES[style_key])
+    """Return a ``Paragraph`` flowable with sanitised, XML-escaped *text* and *style_key*."""
+    return Paragraph(html.escape(_sanitise(str(text))), STYLES[style_key])
 
 
 def _hr() -> HRFlowable:
@@ -381,35 +423,39 @@ class PDFGenerator:
     # ── Section: News ─────────────────────────────────────────────────────────
 
     def _section_news(self) -> list:
-        items = self._d.get("news_items", [])
+        """
+        Render the News Summary section as a prose paragraph followed by the
+        unique sources that contributed headlines.
 
-        # Accept both model instances and plain dicts
-        def _get(item, key: str, default: str = "") -> str:
-            if isinstance(item, dict):
-                return item.get(key, default) or default
-            return getattr(item, key, default) or default
+        Falls back to a brief note when no summary is available.
+        """
+        summary    = self._d.get("news_summary", "").strip()
+        news_items = self._d.get("news_items", [])
 
         flowables: list = [
             _p("News Summary", "section_heading"),
             _hr(),
+            Spacer(1, 0.2 * cm),
         ]
 
-        if not items:
-            flowables.append(_p("No news items available.", "caption"))
-            return flowables
+        if summary:
+            flowables.append(_p(summary, "body"))
+        else:
+            flowables.append(_p("No news summary available for this ticker.", "caption"))
 
-        for item in items[:10]:
-            title  = _get(item, "title",  "Untitled")
-            source = _get(item, "source", "")
-            date   = _get(item, "date",   "")
-            meta_parts = [p for p in (source, date) if p]
-            meta = "  ·  ".join(meta_parts) if meta_parts else ""
+        # ── Source attribution ────────────────────────────────────────────────
+        # Collect unique, non-empty domain names from the news items and render
+        # them as a compact "Sources: …" caption beneath the summary.
+        sources_seen: list[str] = []
+        for item in news_items:
+            src = (item.get("source") if isinstance(item, dict) else getattr(item, "source", "")) or ""
+            src = src.strip()
+            if src and src not in sources_seen:
+                sources_seen.append(src)
 
-            flowables.append(_p(title, "news_title"))
-            if meta:
-                flowables.append(_p(meta, "news_meta"))
-            else:
-                flowables.append(Spacer(1, 0.15 * cm))
+        if sources_seen:
+            flowables.append(Spacer(1, 0.15 * cm))
+            flowables.append(_p(f"Sources: {',  '.join(sources_seen)}", "caption"))
 
         return flowables
 

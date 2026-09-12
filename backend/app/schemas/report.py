@@ -135,6 +135,13 @@ class ReportPayload(BaseModel):
     technical_explanation: str
     """Plain-language explanation of the technical indicators (LLM, ≤ 150 words)."""
 
+    news_summary: str = ""
+    """
+    2–3 sentence prose summary of recent news headlines written by the LLM.
+
+    Empty string when no headlines are available or the LLM fallback is active.
+    """
+
     # ── Structured analysis results ───────────────────────────────────────────
 
     fundamental_result: FundamentalResult

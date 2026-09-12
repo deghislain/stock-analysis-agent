@@ -1,15 +1,16 @@
 """
 Report agent — generates plain-language explanations via the Groq LLM.
 
-``ReportAgent.run(analysis_result=...)`` builds a structured prompt from the
-``AnalysisResult`` object and calls the Groq API via ``LLMClient``.  The LLM
-is instructed to respond with a JSON object containing:
+``ReportAgent.run(analysis_result=..., news_items=...)`` builds a structured
+prompt from the ``AnalysisResult`` object and calls the Groq API via
+``LLMClient``.  The LLM is instructed to respond with a JSON object containing:
 
     executive_summary        : 2–3 sentence overview of the stock
     recommendation           : "Buy" | "Hold" | "Sell"
     rationale                : 3-sentence justification for the recommendation
     fundamental_explanation  : plain-language summary of fundamentals (≤ 150 words)
     technical_explanation    : plain-language summary of technicals   (≤ 150 words)
+    news_summary             : 2–3 sentence prose summary of recent news headlines
 
 Disclaimer enforcement (plan §"Disclaimer enforcement"):
     The disclaimer "For informational purposes only. Not financial advice." is
@@ -29,6 +30,7 @@ Return dict keys
     rationale               : str
     fundamental_explanation : str
     technical_explanation   : str
+    news_summary            : str
     warnings                : list[str]
 """
 
@@ -57,6 +59,9 @@ GROQ_FALLBACK_TEMPLATE: dict[str, str] = {
     ),
     "technical_explanation": (
         "Plain-language explanation unavailable. See the indicator table above."
+    ),
+    "news_summary": (
+        "News summary unavailable. See the raw headlines below."
     ),
 }
 
@@ -92,7 +97,7 @@ class ReportAgent(BaseAgent):
         """Return the display name of this agent."""
         return "ReportAgent"
 
-    async def run(self, *, analysis_result: AnalysisResult) -> dict:
+    async def run(self, *, analysis_result: AnalysisResult, news_items: list[dict] | None = None) -> dict:
         """
         Generate plain-language report text for the analysis in ``analysis_result``.
 
@@ -100,6 +105,11 @@ class ReportAgent(BaseAgent):
         ----------
         analysis_result : AnalysisResult
             Fully assembled analysis object from the orchestrator.
+        news_items : list[dict] | None
+            Raw news items from ``ResearchAgent`` — used to build the news
+            summary section of the prompt.  Each dict should have at least a
+            ``"title"`` key.  When ``None`` or empty, the news section is omitted
+            from the prompt and the fallback summary is used.
 
         Returns
         -------
@@ -116,7 +126,7 @@ class ReportAgent(BaseAgent):
             self._llm_client = LLMClient()
 
         # ── Build and send the prompt ─────────────────────────────────────────
-        prompt = _build_prompt(analysis_result)
+        prompt = _build_prompt(analysis_result, news_items or [])
         warnings: list[str] = []
 
         try:
@@ -139,6 +149,7 @@ class ReportAgent(BaseAgent):
             "rationale":               parsed.get("rationale",         GROQ_FALLBACK_TEMPLATE["rationale"]),
             "fundamental_explanation": parsed.get("fundamental_explanation", GROQ_FALLBACK_TEMPLATE["fundamental_explanation"]),
             "technical_explanation":   parsed.get("technical_explanation",   GROQ_FALLBACK_TEMPLATE["technical_explanation"]),
+            "news_summary":            parsed.get("news_summary",            GROQ_FALLBACK_TEMPLATE["news_summary"]),
             "warnings":                warnings,
         }
 
@@ -146,14 +157,15 @@ class ReportAgent(BaseAgent):
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 
-def _build_prompt(ar: AnalysisResult) -> str:
+def _build_prompt(ar: AnalysisResult, news_items: list[dict] | None = None) -> str:
     """
-    Construct the Groq prompt from an ``AnalysisResult``.
+    Construct the Groq prompt from an ``AnalysisResult`` and recent news headlines.
 
     The prompt includes:
     - Key fundamental metrics (P/E, EPS, profit margin, revenue growth)
     - Key technical signals (RSI, MACD crossover, price vs SMAs, score)
     - Sentiment summary (label + score)
+    - Up to 5 recent news headlines for the news_summary field
     - The computed overall score and recommendation
     - Hard-coded disclaimer so the LLM cannot omit it
     - Explicit JSON response schema the LLM must follow
@@ -197,6 +209,19 @@ def _build_prompt(ar: AnalysisResult) -> str:
         f"{sent.neutral_count} neutral, {sent.negative_count} negative"
     )
 
+    # Build a numbered list of up to 5 headlines for the news section.
+    if news_items is None:
+        news_items = []
+    if news_items:
+        headline_lines = "\n".join(
+            f"  {i + 1}. {(item.get('title') or '').strip()}"
+            for i, item in enumerate(news_items[:5])
+            if (item.get("title") or "").strip()
+        )
+        news_section = headline_lines or "  No headlines available."
+    else:
+        news_section = "  No headlines available."
+
     prompt = f"""You are a beginner-friendly stock analysis assistant.
 Analyse the following data for ticker {ar.ticker} and respond ONLY with a valid JSON object.
 
@@ -211,6 +236,9 @@ DISCLAIMER: {ar.disclaimer}
 === SENTIMENT DATA ===
 {sentiment_section}
 
+=== RECENT NEWS HEADLINES ===
+{news_section}
+
 === OVERALL ===
   Overall score:     {ar.overall_score}/100
   Recommendation:    {ar.recommendation}
@@ -222,7 +250,8 @@ Respond with ONLY this JSON object — no markdown, no extra text:
   "recommendation":          "<Buy|Hold|Sell>",
   "rationale":               "<exactly 3 sentences explaining the recommendation>",
   "fundamental_explanation": "<plain-language explanation of the fundamentals, max 150 words>",
-  "technical_explanation":   "<plain-language explanation of the technical indicators, max 150 words>"
+  "technical_explanation":   "<plain-language explanation of the technical indicators, max 150 words>",
+  "news_summary":            "<2–3 sentence prose summary of the recent news headlines above, max 80 words>"
 }}
 
 Important rules:

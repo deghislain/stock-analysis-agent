@@ -32,8 +32,12 @@ from app.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Token budget for the LLM response — generous enough for all five JSON fields.
-_MAX_TOKENS = 1024
+# Token budget for the LLM response.
+# The prompt now requests six JSON fields (added news_summary); llama3-8b-8192
+# can easily hit the old 1024-token ceiling mid-response, which produces
+# truncated JSON that the parser cannot decode and falls back to the template.
+# 2048 gives ample headroom for all six fields with room to spare.
+_MAX_TOKENS = 2048
 
 # Temperature: low for deterministic, structured JSON output.
 _TEMPERATURE = 0.3
@@ -108,6 +112,10 @@ class LLMClient:
                 model=self._model,
                 max_tokens=_MAX_TOKENS,
                 temperature=_TEMPERATURE,
+                # Force the model to emit a valid JSON object every time.
+                # This prevents markdown code fences, preamble text, and
+                # partial responses that would break _parse_response().
+                response_format={"type": "json_object"},
             )
             content: str = response.choices[0].message.content or ""
 
