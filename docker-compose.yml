@@ -2,42 +2,69 @@
 # Stock Analysis Agent — Docker Compose
 #
 # Services:
-#   backend  — FastAPI (Python 3.12, port 8000)
-#   frontend — React + nginx (port 80 in container, exposed on host port 5173)
+#   backend  — FastAPI / uvicorn (Python 3.12, port 8000)
+#   frontend — React + nginx    (port 80 in container, exposed on host port 5173)
 #
-# Usage:
-#   docker compose up --build          # first run
-#   docker compose up                  # subsequent runs
-#   docker compose down -v             # stop and remove volumes
+# Quick start:
+#   cp .env.example .env          # fill in GROQ_API_KEY (required)
+#   docker compose up --build     # first run — builds both images
+#   docker compose up             # subsequent runs
+#   docker compose down           # stop containers (PDFs are preserved in the
+#                                 # named volume "pdf_reports")
+#   docker compose down -v        # stop AND delete the pdf_reports volume
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
 
-  # ── Backend (FastAPI) ────────────────────────────────────────────────────────
+  # ── Backend (FastAPI + uvicorn) ──────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: stock-agent-backend
     restart: unless-stopped
+
+    # Load secrets and settings from the .env file.
+    # required: false — lets Compose start (with a warning) on a fresh clone
+    # before the user has created .env, so the environment: block below still
+    # applies.  The app will error loudly only if GROQ_API_KEY is missing at
+    # request time, not at container startup.
     env_file:
-      # .env is git-ignored; copy from .env.example and fill in your values.
-      - .env
+      - path: .env
+        required: false
+
     environment:
-      # These can also be overridden here without touching .env.
-      - PDF_OUTPUT_DIR=/app/pdf_reports
+      # Override the default PDF output dir to the named volume mount point.
+      # This must match the target path in the volumes: section below.
+      PDF_OUTPUT_DIR: /app/pdf_reports
+
     ports:
       - "8000:8000"
+
     volumes:
-      # Persist generated PDFs across container restarts.
-      - ./backend/app/pdf_reports:/app/pdf_reports
+      # Named volume — Docker manages ownership so the non-root appuser inside
+      # the container can write PDFs without permission errors.
+      # A bind-mount (./backend/app/pdf_reports:/app/pdf_reports) would be
+      # owned by root on the host and cause PermissionError at runtime.
+      - pdf_reports:/app/pdf_reports
+
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      # Pure-Python HTTP check — guaranteed available in python:3.12-slim with
+      # no extra packages.  Raises an exception (non-zero exit) on any non-200
+      # response so Docker correctly marks the container unhealthy.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - |
+          import urllib.request, sys
+          res = urllib.request.urlopen('http://localhost:8000/health', timeout=5)
+          sys.exit(0 if res.status == 200 else 1)
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 20s
+
     networks:
       - stock-agent-net
 
@@ -48,16 +75,33 @@ services:
       dockerfile: Dockerfile
     container_name: stock-agent-frontend
     restart: unless-stopped
+
     ports:
       # Access the app at http://localhost:5173 on the host.
       - "5173:80"
+
     depends_on:
       backend:
         condition: service_healthy
+
+    healthcheck:
+      # wget ships with nginx:alpine; checks that nginx is serving the index page.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
     networks:
       - stock-agent-net
 
-# ── Networks ─────────────────────────────────────────────────────────────────
+# ── Named volumes ─────────────────────────────────────────────────────────────
+# Docker manages this volume; it persists PDF reports across container restarts
+# and rebuilds.  Remove it explicitly with: docker compose down -v
+volumes:
+  pdf_reports:
+
+# ── Networks ──────────────────────────────────────────────────────────────────
 networks:
   stock-agent-net:
     driver: bridge
