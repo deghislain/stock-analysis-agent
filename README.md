@@ -110,7 +110,7 @@ optional except `GROQ_API_KEY`.
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `GROQ_API_KEY` | _(empty)_ | **Yes** | Groq API key for LLM summaries. Free at [console.groq.com](https://console.groq.com) |
-| `GROQ_MODEL` | `llama3-8b-8192` | No | Groq model ID. Alternatives: `llama3-70b-8192`, `mixtral-8x7b-32768` |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | No | Groq model ID. Alternatives: `llama3-70b-8192`, `mixtral-8x7b-32768` |
 | `FMP_API_KEY` | _(empty)_ | No | Financial Modeling Prep key for the fundamentals fallback. Free at [financialmodelingprep.com](https://financialmodelingprep.com/developer/docs). FMP is skipped when empty. |
 | `DEBUG` | `false` | No | Verbose logging + detailed error responses. Never `true` in production. |
 | `CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | No | JSON array of allowed frontend origins |
