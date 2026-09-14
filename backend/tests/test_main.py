@@ -62,10 +62,10 @@ class TestCreateApp:
         """Routes from the analysis router must be reachable under /api."""
         from app.main import create_app
         app = create_app()
-        paths = {r.path for r in app.routes}
-        # The stub router currently adds no paths, but the prefix wiring is
-        # tested by confirming the router was included without error.
-        assert app is not None  # app booted successfully with the router
+        # url_path_for raises NoMatchFound if the named route is not registered;
+        # a successful call proves the analysis router was included correctly.
+        path = app.url_path_for("validate_ticker", ticker="AAPL")
+        assert str(path) == "/api/validate/AAPL"
 
     def test_report_router_registered(self):
         from app.main import create_app
@@ -73,8 +73,9 @@ class TestCreateApp:
         assert app is not None  # same rationale as above
 
     def test_health_route_present(self):
+        from fastapi.routing import APIRoute
         from app.main import app
-        paths = {r.path for r in app.routes}
+        paths = {r.path for r in app.routes if isinstance(r, APIRoute)}
         assert "/health" in paths
 
     def test_docs_url_configured(self):
