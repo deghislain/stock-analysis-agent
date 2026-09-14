@@ -6,9 +6,10 @@ Responsibilities:
 - Register all API routers under the /api prefix.
 - Expose a health-check endpoint at GET /health.
 - Use a lifespan context manager to:
-    (a) create the PDF output directory at startup, and
+    (a) create the PDF output directory at startup,
     (b) run a background task every 30 minutes that deletes PDF files
-        older than 1 hour, keeping disk usage under control.
+        older than 1 hour, keeping disk usage under control, and
+    (c) call init_db() to create portfolio tables on first boot.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from app.config import settings
 from app.logger import configure_logging, get_logger
 from app.api.routes.analysis import router as analysis_router
 from app.api.routes.report import router as report_router
+from app.portfolio.database import init_db
 
 # Configure logging as the very first thing so all subsequent log calls
 # (including those that fire during import) use the right format.
@@ -110,12 +112,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Manages application startup and shutdown:
     - Creates the PDF output directory if it does not exist.
     - Launches the PDF cleanup background task.
+    - Calls init_db() to create portfolio tables (no-op when they already exist).
     - Cancels the cleanup task cleanly on shutdown.
     """
     # ── Startup ───────────────────────────────────────────────────────────────
     pdf_dir = settings.pdf_output_dir
     os.makedirs(pdf_dir, exist_ok=True)
     logger.info("PDF output directory ready", extra={"directory": pdf_dir})
+
+    init_db()
 
     cleanup_task = asyncio.create_task(_pdf_cleanup_loop())
     logger.info("Application startup complete", extra={"app": settings.app_name})

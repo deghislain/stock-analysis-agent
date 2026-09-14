@@ -10,8 +10,9 @@
 #   docker compose up --build     # first run — builds both images
 #   docker compose up             # subsequent runs
 #   docker compose down           # stop containers (PDFs are preserved in the
-#                                 # named volume "pdf_reports")
-#   docker compose down -v        # stop AND delete the pdf_reports volume
+#                                 # named volume "pdf_reports"; portfolio data
+#                                 # in "db_data")
+#   docker compose down -v        # stop AND delete both named volumes
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -37,6 +38,10 @@ services:
       # Override the default PDF output dir to the named volume mount point.
       # This must match the target path in the volumes: section below.
       PDF_OUTPUT_DIR: /app/pdf_reports
+      # Store the portfolio SQLite database on the db_data named volume so it
+      # survives container restarts and rebuilds.  Four slashes are required for
+      # an absolute path in a SQLite URL: sqlite:////absolute/path/to/file.db
+      DATABASE_URL: sqlite:////app/data/portfolios.db
 
     ports:
       - "8000:8000"
@@ -47,6 +52,9 @@ services:
       # A bind-mount (./backend/app/pdf_reports:/app/pdf_reports) would be
       # owned by root on the host and cause PermissionError at runtime.
       - pdf_reports:/app/pdf_reports
+      # Named volume for the portfolio SQLite database.  Kept separate from
+      # pdf_reports so wiping one does not affect the other.
+      - db_data:/app/data
 
     healthcheck:
       # Pure-Python HTTP check — guaranteed available in python:3.12-slim with
@@ -96,10 +104,11 @@ services:
       - stock-agent-net
 
 # ── Named volumes ─────────────────────────────────────────────────────────────
-# Docker manages this volume; it persists PDF reports across container restarts
-# and rebuilds.  Remove it explicitly with: docker compose down -v
+# Docker manages these volumes; they persist data across container restarts and
+# rebuilds.  Remove them explicitly with: docker compose down -v
 volumes:
   pdf_reports:
+  db_data:
 
 # ── Networks ──────────────────────────────────────────────────────────────────
 networks:

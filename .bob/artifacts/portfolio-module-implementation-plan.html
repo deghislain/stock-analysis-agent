@@ -1,0 +1,857 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Portfolio Module — Implementation Plan</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    color: #1f2328;
+    background: #ffffff;
+    padding: 2rem 1rem 3rem;
+  }
+  .page { max-width: 760px; margin: 0 auto; }
+
+  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; font-weight: 700; margin: 2rem 0 0.6rem;
+       padding-bottom: 0.3rem; border-bottom: 2px solid #e5e7eb; }
+  h3 { font-size: 1rem; font-weight: 700; margin: 1.4rem 0 0.4rem; color: #3b82d4; }
+  h4 { font-size: 0.9rem; font-weight: 700; margin: 1rem 0 0.3rem; color: #57606a; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  p { margin: 0.5rem 0; }
+  ul, ol { margin: 0.4rem 0 0.4rem 1.4rem; }
+  li { margin: 0.2rem 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 0.82em;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+    white-space: nowrap;
+  }
+  pre {
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 5px;
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    margin: 0.6rem 0 1rem;
+    font-size: 0.8em;
+    line-height: 1.55;
+  }
+  pre code { background: none; border: none; padding: 0; white-space: pre; }
+
+  table { width: 100%; border-collapse: collapse; margin: 0.6rem 0 1rem; font-size: 0.85em; }
+  th { background: #f7f8fa; text-align: left; padding: 0.45rem 0.6rem;
+       border: 1px solid #e5e7eb; font-weight: 600; }
+  td { padding: 0.4rem 0.6rem; border: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 0.1em 0.5em;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+    margin-left: 0.3em;
+  }
+  .badge-new  { background: #dbeafe; color: #1e40af; }
+  .badge-mod  { background: #fef3c7; color: #92400e; }
+  .badge-warn { background: #fee2e2; color: #991b1b; }
+  .badge-ok   { background: #d1fae5; color: #065f46; }
+
+  .step-box {
+    background: #f7f8fa;
+    border-left: 4px solid #3b82d4;
+    border-radius: 0 4px 4px 0;
+    padding: 0.6rem 0.9rem;
+    margin: 0.5rem 0 1rem;
+  }
+  .step-box p { margin: 0.2rem 0; }
+
+  .warn-box {
+    background: #fff8ed;
+    border-left: 4px solid #f59e0b;
+    border-radius: 0 4px 4px 0;
+    padding: 0.6rem 0.9rem;
+    margin: 0.5rem 0 1rem;
+    font-size: 0.88em;
+  }
+  .warn-box p { margin: 0.15rem 0; }
+
+  .note { color: #57606a; font-style: italic; font-size: 0.88em; }
+
+  .toc { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 5px;
+         padding: 0.8rem 1.1rem; margin: 1rem 0 2rem; }
+  .toc ol { margin-left: 1.2rem; }
+  .toc li { margin: 0.25rem 0; font-size: 0.9em; }
+
+  .order-table td:first-child { font-weight: 600; white-space: nowrap; }
+  .order-table td:nth-child(2) { width: 55%; }
+
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 2rem 0; }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+    text-align: center;
+    font-size: 0.78em;
+    color: #57606a;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Portfolio Module — Implementation Plan</h1>
+  <p class="note">Stock Analysis Agent · Junior-developer implementation guide</p>
+
+  <div class="toc">
+    <strong>Contents</strong>
+    <ol>
+      <li>Overview &amp; scope</li>
+      <li>Persistence strategy</li>
+      <li>Data models</li>
+      <li>Performance ranking definition</li>
+      <li>Backend changes (new files &amp; modified files)</li>
+      <li>Frontend/UI changes</li>
+      <li>Report refresh &amp; scheduling</li>
+      <li>Edge cases &amp; validation rules</li>
+      <li>Folder &amp; module structure</li>
+      <li>Junior-developer watch-outs</li>
+      <li>Recommended implementation order</li>
+    </ol>
+  </div>
+
+
+  
+  <h2>1 · Overview &amp; Scope</h2>
+
+  <p>The portfolio module adds a persistence layer, a new UI tab, and a background scheduler on top of the existing single-report pipeline. It does <strong>not</strong> replace or break any existing functionality — every new API endpoint is additive and lives under a new <code>/api/portfolios</code> prefix.</p>
+
+  <table>
+    <tr><th>Requirement</th><th>What it means technically</th></tr>
+    <tr><td>Create / edit / delete portfolio</td><td>CRUD REST endpoints + GUI forms</td></tr>
+    <tr><td>Add stock from a report</td><td>Button on <code>Report.tsx</code>; calls <code>POST /api/portfolios/{id}/stocks</code></td></tr>
+    <tr><td>Portfolio tab with stock list &amp; "View" button</td><td>New React page + <code>GET /api/portfolios</code> + stored report reference</td></tr>
+    <tr><td>Ranking by performance</td><td>Composite score already computed by the orchestrator; ranking is a sort</td></tr>
+    <tr><td>Remove stock from portfolio</td><td><code>DELETE /api/portfolios/{id}/stocks/{ticker}</code></td></tr>
+    <tr><td>Automatic quarterly refresh</td><td>APScheduler background job; re-runs existing orchestrator</td></tr>
+    <tr><td>Historical ranking</td><td>Snapshot table written after every refresh; exposed via API</td></tr>
+  </table>
+
+
+  
+  <h2>2 · Persistence Strategy</h2>
+
+  <p>The app currently uses an <strong>in-memory</strong> job store. For portfolios we need data to survive restarts, so we need a file-backed store. Two viable options:</p>
+
+  <table>
+    <tr><th>Option</th><th>Pros</th><th>Cons</th><th>Recommendation</th></tr>
+    <tr>
+      <td><strong>SQLite + SQLAlchemy</strong></td>
+      <td>Relational queries; easy ranking; mature; single file on disk</td>
+      <td>More boilerplate; adds a dependency</td>
+      <td>✅ Recommended</td>
+    </tr>
+    <tr>
+      <td>JSON file (hand-rolled)</td>
+      <td>Zero dependencies</td>
+      <td>No transactions; concurrent write corruption; hard to query for rankings</td>
+      <td>❌ Avoid</td>
+    </tr>
+  </table>
+
+  <p><strong>Use SQLite via SQLAlchemy (sync, not async).</strong> The portfolio operations are not on the hot path and the extra complexity of async SQLAlchemy is not justified here. The database file lives at a path configured in <code>config.py</code> (e.g. <code>/app/data/portfolios.db</code>) and is mounted as a Docker volume alongside the PDF volume.</p>
+
+  <p>Add to <code>requirements.txt</code>:</p>
+  <pre><code>sqlalchemy==2.0.36
+# SQLite ships with Python's stdlib — no extra install needed</code></pre>
+
+  <p>Add to <code>.env.example</code> and <code>config.py</code>:</p>
+  <pre><code>DATABASE_URL=sqlite:////app/data/portfolios.db   # Docker default
+# DATABASE_URL=sqlite:///portfolios.db           # bare-metal default (project root)</code></pre>
+
+
+  
+  <h2>3 · Data Models</h2>
+
+  <h3>3.1 SQLAlchemy ORM tables</h3>
+
+  <pre><code># backend/app/portfolio/models.py
+
+from datetime import datetime
+from sqlalchemy import (
+    Column, String, Float, Integer, DateTime,
+    ForeignKey, Text, UniqueConstraint
+)
+from sqlalchemy.orm import DeclarativeBase, relationship
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Portfolio(Base):
+    __tablename__ = "portfolios"
+
+    id          = Column(String, primary_key=True)   # UUID
+    name        = Column(String(120), nullable=False)
+    description = Column(Text, default="")
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    stocks         = relationship("PortfolioStock", back_populates="portfolio",
+                                  cascade="all, delete-orphan")
+    ranking_snaps  = relationship("RankingSnapshot", back_populates="portfolio",
+                                  cascade="all, delete-orphan")
+
+
+class PortfolioStock(Base):
+    __tablename__ = "portfolio_stocks"
+    __table_args__ = (UniqueConstraint("portfolio_id", "ticker"),)
+
+    id               = Column(String, primary_key=True)   # UUID
+    portfolio_id     = Column(String, ForeignKey("portfolios.id"), nullable=False)
+    ticker           = Column(String(10), nullable=False)
+    company_name     = Column(String(200), default="")
+    short_summary    = Column(Text, default="")       # executive_summary from latest report
+    latest_report_id = Column(String, nullable=True)  # job_id of most recent completed report
+    overall_score    = Column(Float, nullable=True)   # cached from latest report
+    recommendation   = Column(String(10), nullable=True)  # "Buy" / "Hold" / "Sell"
+    added_at         = Column(DateTime, default=datetime.utcnow)
+    last_refreshed   = Column(DateTime, nullable=True)
+
+    portfolio = relationship("Portfolio", back_populates="stocks")
+
+
+class RankingSnapshot(Base):
+    __tablename__ = "ranking_snapshots"
+
+    id           = Column(String, primary_key=True)    # UUID
+    portfolio_id = Column(String, ForeignKey("portfolios.id"), nullable=False)
+    snapshot_at  = Column(DateTime, nullable=False)    # when snapshot was taken
+    trigger      = Column(String(20), default="manual") # "manual" | "quarterly"
+
+    entries = relationship("RankingEntry", back_populates="snapshot",
+                           cascade="all, delete-orphan",
+                           order_by="RankingEntry.rank")
+    portfolio = relationship("Portfolio", back_populates="ranking_snaps")
+
+
+class RankingEntry(Base):
+    __tablename__ = "ranking_entries"
+
+    id          = Column(String, primary_key=True)  # UUID
+    snapshot_id = Column(String, ForeignKey("ranking_snapshots.id"), nullable=False)
+    rank        = Column(Integer, nullable=False)
+    ticker      = Column(String(10), nullable=False)
+    overall_score      = Column(Float, nullable=True)
+    fundamental_score  = Column(Float, nullable=True)
+    technical_score    = Column(Float, nullable=True)
+    sentiment_score    = Column(Float, nullable=True)
+    recommendation     = Column(String(10), nullable=True)
+
+    snapshot = relationship("RankingSnapshot", back_populates="entries")</code></pre>
+
+  <div class="warn-box">
+    <p><strong>⚠ Junior watch-out:</strong> <code>latest_report_id</code> is a <em>job_id</em> from the existing in-memory <code>JobStore</code>. The job store is cleared on restart, so after a restart the report JSON will be gone even though the portfolio record still holds an ID. For a production system you would persist report payloads too — but for this version, store the key report fields (score, recommendation, executive_summary) directly on <code>PortfolioStock</code> so the UI can render without needing the job store. The "View" button then re-triggers an analysis job on demand if the original job no longer exists.</p>
+  </div>
+
+  <h3>3.2 Pydantic API schemas</h3>
+
+  <pre><code># backend/app/schemas/portfolio.py
+
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
+
+class PortfolioCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    description: str = ""
+
+class PortfolioUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    description: Optional[str] = None
+
+class PortfolioStockIn(BaseModel):
+    ticker: str
+    job_id: str          # the completed report to pull data from
+
+class PortfolioStockOut(BaseModel):
+    ticker: str
+    company_name: str
+    short_summary: str
+    overall_score: Optional[float]
+    recommendation: Optional[str]
+    latest_report_id: Optional[str]
+    added_at: datetime
+    last_refreshed: Optional[datetime]
+
+class PortfolioOut(BaseModel):
+    id: str
+    name: str
+    description: str
+    created_at: datetime
+    updated_at: datetime
+    stocks: list[PortfolioStockOut]
+
+class RankingEntryOut(BaseModel):
+    rank: int
+    ticker: str
+    overall_score: Optional[float]
+    fundamental_score: Optional[float]
+    technical_score: Optional[float]
+    sentiment_score: Optional[float]
+    recommendation: Optional[str]
+
+class RankingSnapshotOut(BaseModel):
+    id: str
+    snapshot_at: datetime
+    trigger: str
+    entries: list[RankingEntryOut]</code></pre>
+
+
+  
+  <h2>4 · Performance Ranking Definition</h2>
+
+  <p>The app already computes a 0–100 <strong>composite score</strong> per report:</p>
+  <pre><code>overall_score = fundamental_score × 0.40
+              + technical_score   × 0.40
+              + sentiment_score   × 0.20</code></pre>
+
+  <p>This is the single number used for ranking. Stocks are sorted <strong>descending by <code>overall_score</code></strong> (highest score = rank 1). When two stocks have the same score (to two decimal places), they are sorted alphabetically by ticker as a stable tiebreaker.</p>
+
+  <table>
+    <tr><th>Score range</th><th>Recommendation</th><th>Meaning in context</th></tr>
+    <tr><td>≥ 60</td><td>Buy</td><td>Strong positive signals across all three dimensions</td></tr>
+    <tr><td>40 – 59</td><td>Hold</td><td>Mixed or neutral signals</td></tr>
+    <tr><td>&lt; 40</td><td>Sell</td><td>Weak or negative signals</td></tr>
+  </table>
+
+  <p><strong>Component scores and what drives them:</strong></p>
+  <ul>
+    <li><strong>Fundamental score (0–100)</strong> — derived from P/E ratio, P/B ratio, EPS growth, debt-to-equity, profit margin, revenue growth, and dividend yield. Computed by <code>FundamentalAnalyser</code>.</li>
+    <li><strong>Technical score (0–100)</strong> — derived from RSI(14), MACD crossover direction, and price position relative to SMA-20/50/200. Computed by <code>TechnicalAnalyser</code>.</li>
+    <li><strong>Sentiment score (0–100)</strong> — derived from the positive/negative/neutral ratio of recent DuckDuckGo news headlines. Computed by <code>SentimentAnalyser</code>.</li>
+  </ul>
+
+  <div class="warn-box">
+    <p><strong>Ranking edge cases:</strong> A stock whose data could not be fetched at refresh time (network error, unknown ticker) receives <code>overall_score = null</code>. Null-score stocks are sorted to the <em>bottom</em> of the ranking and displayed with a "⚠ Data unavailable" badge, so they don't interfere with ranked stocks but remain visible to the user.</p>
+  </div>
+
+
+  
+  <h2>5 · Backend Changes</h2>
+
+  <h3>5.1 New files</h3>
+
+  <table>
+    <tr><th>File</th><th>Purpose</th></tr>
+    <tr><td><code>app/portfolio/models.py</code></td><td>SQLAlchemy ORM classes (§3.1)</td></tr>
+    <tr><td><code>app/portfolio/database.py</code></td><td>Engine creation, session factory, <code>init_db()</code></td></tr>
+    <tr><td><code>app/portfolio/crud.py</code></td><td>All DB read/write helpers (no SQL in route handlers)</td></tr>
+    <tr><td><code>app/portfolio/ranking.py</code></td><td>Pure function: takes a list of <code>PortfolioStock</code> rows → sorted list + snapshot</td></tr>
+    <tr><td><code>app/portfolio/scheduler.py</code></td><td>APScheduler setup; quarterly refresh job</td></tr>
+    <tr><td><code>app/api/routes/portfolios.py</code></td><td>All portfolio REST endpoints</td></tr>
+    <tr><td><code>app/schemas/portfolio.py</code></td><td>Pydantic in/out models (§3.2)</td></tr>
+    <tr><td><code>backend/tests/test_portfolios.py</code></td><td>Unit + integration tests for CRUD and ranking</td></tr>
+  </table>
+
+  <h3>5.2 Modified files</h3>
+
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td><code>app/main.py</code></td><td>Call <code>init_db()</code> in lifespan startup; register portfolio router; start scheduler</td></tr>
+    <tr><td><code>app/config.py</code></td><td>Add <code>database_url</code> and <code>quarterly_refresh_enabled</code> settings</td></tr>
+    <tr><td><code>app/api/dependencies.py</code></td><td>Add <code>get_db()</code> dependency (yields a SQLAlchemy session)</td></tr>
+    <tr><td><code>requirements.txt</code></td><td>Add <code>sqlalchemy==2.0.36</code>, <code>apscheduler==3.10.4</code></td></tr>
+    <tr><td><code>docker-compose.yml</code></td><td>Add <code>db_data</code> named volume; mount at <code>/app/data</code></td></tr>
+    <tr><td><code>.env.example</code></td><td>Document <code>DATABASE_URL</code> and <code>QUARTERLY_REFRESH_ENABLED</code></td></tr>
+  </table>
+
+  <h3>5.3 REST API endpoints</h3>
+
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Description</th><th>Status</th></tr>
+    <tr><td>GET</td><td><code>/api/portfolios</code></td><td>List all portfolios (id, name, stock count)</td><td>200</td></tr>
+    <tr><td>POST</td><td><code>/api/portfolios</code></td><td>Create a portfolio</td><td>201</td></tr>
+    <tr><td>GET</td><td><code>/api/portfolios/{id}</code></td><td>Get full portfolio with stock list</td><td>200 / 404</td></tr>
+    <tr><td>PATCH</td><td><code>/api/portfolios/{id}</code></td><td>Rename / edit description</td><td>200 / 404</td></tr>
+    <tr><td>DELETE</td><td><code>/api/portfolios/{id}</code></td><td>Delete portfolio and all its stocks</td><td>204 / 404</td></tr>
+    <tr><td>POST</td><td><code>/api/portfolios/{id}/stocks</code></td><td>Add a stock (body: ticker + job_id)</td><td>201 / 404 / 409</td></tr>
+    <tr><td>DELETE</td><td><code>/api/portfolios/{id}/stocks/{ticker}</code></td><td>Remove a stock</td><td>204 / 404</td></tr>
+    <tr><td>GET</td><td><code>/api/portfolios/{id}/ranking</code></td><td>Current ranking (live, from cached scores)</td><td>200 / 404</td></tr>
+    <tr><td>GET</td><td><code>/api/portfolios/{id}/history</code></td><td>All ranking snapshots (summary list)</td><td>200 / 404</td></tr>
+    <tr><td>GET</td><td><code>/api/portfolios/{id}/history/{snapshot_id}</code></td><td>Full detail of one snapshot</td><td>200 / 404</td></tr>
+    <tr><td>POST</td><td><code>/api/portfolios/{id}/refresh</code></td><td>Manually trigger a full refresh + snapshot</td><td>202 / 404</td></tr>
+  </table>
+
+  <h3>5.4 database.py</h3>
+
+  <pre><code># backend/app/portfolio/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.config import settings
+from app.portfolio.models import Base
+
+engine = create_engine(
+    settings.database_url,
+    connect_args={"check_same_thread": False},  # required for SQLite
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def init_db() -&gt; None:
+    """Create all tables if they don't exist. Safe to call on every startup."""
+    Base.metadata.create_all(bind=engine)</code></pre>
+
+  <h3>5.5 crud.py — key helpers</h3>
+
+  <pre><code># backend/app/portfolio/crud.py  (outline)
+from sqlalchemy.orm import Session
+from app.portfolio.models import Portfolio, PortfolioStock, RankingSnapshot, RankingEntry
+import uuid
+from datetime import datetime
+
+def create_portfolio(db: Session, name: str, description: str = "") -&gt; Portfolio: ...
+def get_portfolio(db: Session, portfolio_id: str) -&gt; Portfolio | None: ...
+def list_portfolios(db: Session) -&gt; list[Portfolio]: ...
+def update_portfolio(db: Session, portfolio_id: str, **kwargs) -&gt; Portfolio | None: ...
+def delete_portfolio(db: Session, portfolio_id: str) -&gt; bool: ...
+
+def add_stock(db: Session, portfolio_id: str,
+              ticker: str, report_payload: dict) -&gt; PortfolioStock: ...
+    # Extracts: company_name, short_summary, overall_score, recommendation,
+    #           latest_report_id from report_payload.
+
+def remove_stock(db: Session, portfolio_id: str, ticker: str) -&gt; bool: ...
+
+def update_stock_from_report(db: Session, portfolio_id: str,
+                             ticker: str, report_payload: dict) -&gt; None: ...
+
+def save_ranking_snapshot(db: Session, portfolio_id: str,
+                          entries: list[dict], trigger: str) -&gt; RankingSnapshot: ...
+
+def get_ranking_history(db: Session, portfolio_id: str) -&gt; list[RankingSnapshot]: ...
+def get_snapshot(db: Session, snapshot_id: str) -&gt; RankingSnapshot | None: ...</code></pre>
+
+  <h3>5.6 ranking.py</h3>
+
+  <pre><code># backend/app/portfolio/ranking.py
+
+from app.portfolio.models import PortfolioStock
+
+def compute_ranking(stocks: list[PortfolioStock]) -&gt; list[dict]:
+    """
+    Sort stocks by overall_score descending, then ticker ascending.
+    Null-score stocks go to the bottom.
+    Returns a list of dicts ready to be stored as RankingEntry rows.
+    """
+    def sort_key(s: PortfolioStock):
+        score = s.overall_score if s.overall_score is not None else -1.0
+        return (-score, s.ticker)
+
+    sorted_stocks = sorted(stocks, key=sort_key)
+    return [
+        {
+            "rank": i + 1,
+            "ticker": s.ticker,
+            "overall_score": s.overall_score,
+            "recommendation": s.recommendation,
+        }
+        for i, s in enumerate(sorted_stocks)
+    ]</code></pre>
+
+  <h3>5.7 scheduler.py</h3>
+
+  <pre><code># backend/app/portfolio/scheduler.py
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+scheduler = AsyncIOScheduler()
+
+def start_scheduler(orchestrator, job_store, db_session_factory) -&gt; None:
+    """
+    Register the quarterly refresh job and start the scheduler.
+
+    Quarterly trigger: runs at 07:00 UTC on the first weekday after
+    each quarter-end (Jan 2, Apr 1, Jul 1, Oct 1).
+    Adjust dates to match when companies typically file earnings.
+    """
+    scheduler.add_job(
+        _quarterly_refresh,
+        CronTrigger(month="1,4,7,10", day="2", hour=7, minute=0),
+        args=[orchestrator, job_store, db_session_factory],
+        id="quarterly_refresh",
+        replace_existing=True,
+    )
+    scheduler.start()
+
+def stop_scheduler() -&gt; None:
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+
+async def _quarterly_refresh(orchestrator, job_store, db_session_factory) -&gt; None:
+    """
+    For every stock in every portfolio: run a fresh analysis job,
+    wait for completion, update PortfolioStock, then save a ranking snapshot.
+    """
+    from app.portfolio.crud import (
+        list_portfolios, update_stock_from_report, save_ranking_snapshot
+    )
+    from app.portfolio.ranking import compute_ranking
+    import uuid, asyncio
+
+    with db_session_factory() as db:
+        portfolios = list_portfolios(db)
+
+    for portfolio in portfolios:
+        # Fire one analysis job per unique ticker across this portfolio's stocks
+        tickers = {s.ticker for s in portfolio.stocks}
+        results: dict[str, dict] = {}
+
+        for ticker in tickers:
+            job_id = str(uuid.uuid4())
+            job_store.create_job(job_id)
+            await orchestrator.run(ticker, job_id)   # runs inline (background task)
+            job = job_store.get_job(job_id)
+            if job and job.status == "complete" and job.result:
+                results[ticker] = job.result if isinstance(job.result, dict) \
+                                  else job.result.model_dump()
+
+        with db_session_factory() as db:
+            for ticker, payload in results.items():
+                update_stock_from_report(db, portfolio.id, ticker, payload)
+
+            updated_portfolio = db.get(Portfolio, portfolio.id)
+            ranked = compute_ranking(updated_portfolio.stocks)
+            save_ranking_snapshot(db, portfolio.id, ranked, trigger="quarterly")</code></pre>
+
+  <div class="warn-box">
+    <p><strong>⚠ Scheduler concurrency:</strong> APScheduler's <code>AsyncIOScheduler</code> runs jobs in the same event loop as FastAPI/uvicorn. The quarterly refresh can be slow (N portfolios × M stocks × ~10 s per report). Cap the total number of concurrent analysis tasks with <code>asyncio.Semaphore</code> — otherwise the event loop starves the HTTP server during a refresh. A semaphore of 3 is a safe starting point.</p>
+  </div>
+
+  <h3>5.8 Wiring into main.py</h3>
+
+  <pre><code># Inside the lifespan context manager in app/main.py:
+
+from app.portfolio.database import init_db
+from app.portfolio.scheduler import start_scheduler, stop_scheduler
+from app.api.routes.portfolios import router as portfolio_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_db()                                          # create tables
+    start_scheduler(orchestrator, job_store, SessionLocal)
+    ...
+    yield
+    # Shutdown
+    stop_scheduler()
+    ...
+
+# Register the router:
+application.include_router(portfolio_router, prefix="/api", tags=["portfolios"])</code></pre>
+
+
+  
+  <h2>6 · Frontend / UI Changes</h2>
+
+  <h3>6.1 New files</h3>
+
+  <table>
+    <tr><th>File</th><th>Purpose</th></tr>
+    <tr><td><code>src/pages/Portfolio.tsx</code></td><td>Main portfolio tab page</td></tr>
+    <tr><td><code>src/components/portfolio/PortfolioList.tsx</code></td><td>Left sidebar: list of portfolios with create/edit/delete</td></tr>
+    <tr><td><code>src/components/portfolio/PortfolioDetail.tsx</code></td><td>Right panel: stock list, ranking, "View" and "Remove" buttons</td></tr>
+    <tr><td><code>src/components/portfolio/PortfolioFormModal.tsx</code></td><td>Create / edit form in a modal dialog</td></tr>
+    <tr><td><code>src/components/portfolio/AddToPortfolioModal.tsx</code></td><td>Modal triggered from Report page: pick portfolio or create new</td></tr>
+    <tr><td><code>src/components/portfolio/RankingHistory.tsx</code></td><td>Expandable panel showing historical snapshots</td></tr>
+    <tr><td><code>src/hooks/usePortfolios.ts</code></td><td>TanStack Query hooks: list, get, create, update, delete, add/remove stock</td></tr>
+    <tr><td><code>src/services/portfolioApi.ts</code></td><td>Axios calls for all portfolio endpoints</td></tr>
+    <tr><td><code>src/types/portfolio.ts</code></td><td>TypeScript interfaces matching <code>schemas/portfolio.py</code></td></tr>
+  </table>
+
+  <h3>6.2 Modified files</h3>
+
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td><code>src/App.tsx</code></td><td>Add <code>/portfolio</code> route and nav tab</td></tr>
+    <tr><td><code>src/pages/Report.tsx</code></td><td>Add "Add to Portfolio" button after report is complete</td></tr>
+  </table>
+
+  <h3>6.3 Navigation</h3>
+
+  <p>Add a tab bar at the top of the app with two tabs: <strong>Analysis</strong> (existing) and <strong>Portfolio</strong> (new). Use React Router <code>&lt;Link&gt;</code> components — <code>/</code> for Analysis, <code>/portfolio</code> for Portfolio.</p>
+
+  <h3>6.4 Portfolio tab layout</h3>
+
+  <pre><code>┌─────────────────────────────────────────────────────────┐
+│  [Analysis]  [Portfolio]          ← top nav tabs        │
+├────────────────┬────────────────────────────────────────┤
+│  My Portfolios │  Tech Stocks                           │
+│  ─────────     │  ──────────────────────────────────── │
+│  Tech Stocks ◀ │  Rank  Ticker  Score  Rec    Actions  │
+│  Dividends     │   1    AAPL    74     Buy   [View][✕] │
+│  ETFs          │   2    MSFT    68     Buy   [View][✕] │
+│                │   3    INTC    41     Hold  [View][✕] │
+│  [+ New]       │                                        │
+│                │  [▶ View Ranking History]              │
+│  ✎  🗑          │  [↻ Refresh Now]                      │
+└────────────────┴────────────────────────────────────────┘</code></pre>
+
+  <h3>6.5 "Add to Portfolio" button on Report page</h3>
+
+  <p>After <code>status === "complete"</code>, render a button below the report header:</p>
+  <pre><code>// src/pages/Report.tsx  (addition)
+{report?.status === "complete" &amp;&amp; (
+  &lt;button onClick={() =&gt; setShowAddModal(true)}&gt;
+    + Add to Portfolio
+  &lt;/button&gt;
+)}
+{showAddModal &amp;&amp; (
+  &lt;AddToPortfolioModal
+    ticker={ticker}
+    jobId={jobId}
+    onClose={() =&gt; setShowAddModal(false)}
+  /&gt;
+)}</code></pre>
+
+  <p>The modal shows a dropdown of existing portfolios plus a "Create new portfolio" option. On confirm it calls <code>POST /api/portfolios/{id}/stocks</code> with <code>{ ticker, job_id }</code>.</p>
+
+  <h3>6.6 "View" button behaviour</h3>
+
+  <p>The "View" button on a portfolio stock navigates to <code>/report/{latest_report_id}</code>. If the report no longer exists in the in-memory job store (e.g. after a server restart), the Report page should detect the 404 and show a "Report expired — click to regenerate" call-to-action that fires a new <code>POST /api/analyse</code> for that ticker.</p>
+
+  <h3>6.7 Ranking History panel</h3>
+
+  <p>Rendered as a collapsible section at the bottom of <code>PortfolioDetail</code>. Each row shows the snapshot date and trigger. Clicking a row expands the ranked table for that snapshot. Uses <code>GET /api/portfolios/{id}/history</code> (list) and <code>GET /api/portfolios/{id}/history/{snapshot_id}</code> (detail) — fetch detail lazily only when the row is expanded.</p>
+
+
+  
+  <h2>7 · Report Refresh &amp; Scheduling</h2>
+
+  <h3>7.1 What "quarterly refresh" means</h3>
+
+  <p>Companies publish earnings quarterly (roughly Jan, Apr, Jul, Oct). The scheduler fires once per quarter on the first business day of those months at 07:00 UTC. It re-runs the full analysis pipeline for every stock in every portfolio using the existing <code>Orchestrator.run()</code> — no new code is needed in the analysis layer.</p>
+
+  <h3>7.2 Refresh flow</h3>
+
+  <div class="step-box">
+    <p><strong>Step 1</strong> — Scheduler fires <code>_quarterly_refresh()</code></p>
+    <p><strong>Step 2</strong> — For each unique ticker across all portfolios, create a new job and call <code>orchestrator.run(ticker, job_id)</code></p>
+    <p><strong>Step 3</strong> — On completion, call <code>crud.update_stock_from_report()</code> to update <code>overall_score</code>, <code>recommendation</code>, <code>short_summary</code>, <code>latest_report_id</code>, and <code>last_refreshed</code> on each <code>PortfolioStock</code> row</p>
+    <p><strong>Step 4</strong> — Call <code>ranking.compute_ranking()</code> for each portfolio</p>
+    <p><strong>Step 5</strong> — Call <code>crud.save_ranking_snapshot()</code> with <code>trigger="quarterly"</code></p>
+  </div>
+
+  <h3>7.3 Manual refresh</h3>
+
+  <p><code>POST /api/portfolios/{id}/refresh</code> runs the same logic as the quarterly refresh but for a single portfolio, triggered by the user via the "↻ Refresh Now" button in the UI. Returns HTTP 202 immediately; the frontend can poll <code>GET /api/portfolios/{id}</code> and watch <code>last_refreshed</code> values change.</p>
+
+  <h3>7.4 Concurrency guard</h3>
+
+  <pre><code># In scheduler.py and the manual refresh route handler:
+_REFRESH_SEMAPHORE = asyncio.Semaphore(3)
+
+async with _REFRESH_SEMAPHORE:
+    await orchestrator.run(ticker, job_id)</code></pre>
+
+  <p>This ensures at most 3 analysis jobs run in parallel during a refresh, preventing the event loop from being starved by a large portfolio.</p>
+
+
+  
+  <h2>8 · Edge Cases &amp; Validation Rules</h2>
+
+  <table>
+    <tr><th>Situation</th><th>Rule</th></tr>
+    <tr><td>Adding a ticker that already exists in a portfolio</td><td>Return HTTP 409 Conflict. Message: "Ticker AAPL is already in this portfolio."</td></tr>
+    <tr><td>Adding a stock from a report that is not yet complete</td><td>Return HTTP 422. The frontend "Add to Portfolio" button must only be enabled when <code>status === "complete"</code>.</td></tr>
+    <tr><td>Portfolio name empty or only whitespace</td><td>Pydantic <code>min_length=1</code> + backend strips and re-validates.</td></tr>
+    <tr><td>Portfolio with 0 stocks ranked</td><td>Ranking endpoint returns an empty list — not an error.</td></tr>
+    <tr><td>Stock data unavailable during refresh</td><td>Set <code>overall_score = null</code>, <code>recommendation = null</code>. Add a warning but continue refresh for other stocks. Do not abort the whole portfolio refresh.</td></tr>
+    <tr><td>Deleting a portfolio that is currently being refreshed</td><td>SQLite row-level locking handles this — the refresh's session will complete its transaction before the delete succeeds, or vice-versa. Acceptable for v1.</td></tr>
+    <tr><td>Ticker is valid format but no longer trades</td><td>The existing <code>GET /api/validate/{ticker}</code> endpoint catches this before any report is generated. The "Add to Portfolio" button only appears after a successful report, so this case is already filtered.</td></tr>
+    <tr><td>Very large portfolio (50+ stocks) during quarterly refresh</td><td>The semaphore (limit 3 concurrent jobs) prevents overload. Total time = ceil(N/3) × ~10 s. For 50 stocks ≈ 3 minutes. Log a warning if total time exceeds 10 minutes.</td></tr>
+    <tr><td>Report PDF path no longer valid after restart</td><td>The "View" button on a portfolio stock only links to the report page (uses <code>job_id</code> from job store). After restart the job store is empty. Handle the 404 in the frontend as described in §6.6.</td></tr>
+    <tr><td>Max portfolios per user</td><td>No hard limit in v1 (single-user local tool). Document this assumption.</td></tr>
+  </table>
+
+
+  
+  <h2>9 · Folder &amp; Module Structure</h2>
+
+  <pre><code>backend/app/
+├── portfolio/                          ← NEW package
+│   ├── __init__.py
+│   ├── models.py                       # SQLAlchemy ORM tables
+│   ├── database.py                     # engine, SessionLocal, init_db()
+│   ├── crud.py                         # all DB read/write helpers
+│   ├── ranking.py                      # pure ranking computation
+│   └── scheduler.py                    # APScheduler quarterly refresh
+│
+├── api/routes/
+│   ├── analysis.py                     # (existing, unchanged)
+│   ├── report.py                       # (existing, unchanged)
+│   └── portfolios.py                   # NEW: all portfolio endpoints
+│
+├── schemas/
+│   ├── analysis.py                     # (existing, unchanged)
+│   ├── report.py                       # (existing, unchanged)
+│   └── portfolio.py                    # NEW: Pydantic schemas
+│
+├── config.py                           # MODIFIED: add database_url
+├── main.py                             # MODIFIED: init_db, scheduler, router
+└── ...
+
+frontend/src/
+├── pages/
+│   ├── Home.tsx                        # (existing)
+│   ├── Report.tsx                      # MODIFIED: add "Add to Portfolio" button
+│   └── Portfolio.tsx                   # NEW: portfolio tab page
+│
+├── components/
+│   ├── portfolio/                      # NEW sub-folder
+│   │   ├── PortfolioList.tsx
+│   │   ├── PortfolioDetail.tsx
+│   │   ├── PortfolioFormModal.tsx
+│   │   ├── AddToPortfolioModal.tsx
+│   │   └── RankingHistory.tsx
+│   └── ...existing components...
+│
+├── hooks/
+│   ├── useAnalysis.ts                  # (existing)
+│   └── usePortfolios.ts                # NEW
+│
+├── services/
+│   ├── api.ts                          # (existing)
+│   └── portfolioApi.ts                 # NEW
+│
+├── types/
+│   ├── index.ts                        # (existing)
+│   └── portfolio.ts                    # NEW
+│
+└── App.tsx                             # MODIFIED: add /portfolio route + tab</code></pre>
+
+
+  
+  <h2>10 · Junior-Developer Watch-Outs</h2>
+
+  <h4>1. SQLite and Docker volumes</h4>
+  <p>The database file must live in a Docker volume, not inside the container image. Add a second named volume <code>db_data</code> to <code>docker-compose.yml</code> mounted at <code>/app/data</code>. If you forget this the database resets on every <code>docker compose up --build</code>.</p>
+
+  <h4>2. Never call <code>Orchestrator.run()</code> directly from a route handler</h4>
+  <p>The manual refresh endpoint (<code>POST /api/portfolios/{id}/refresh</code>) must return HTTP 202 immediately and run the refresh as a <code>BackgroundTask</code>, exactly like <code>POST /api/analyse</code> does. If you <code>await orchestrator.run()</code> inside the route handler the request will time out for large portfolios.</p>
+
+  <h4>3. <code>check_same_thread=False</code> is required for SQLite</h4>
+  <p>SQLAlchemy's SQLite dialect refuses cross-thread access by default. You must pass <code>connect_args={"check_same_thread": False}</code> when creating the engine. This is safe because SQLAlchemy manages its own connection pool and serialises access correctly.</p>
+
+  <h4>4. The job store is ephemeral; the database is persistent</h4>
+  <p>These are two separate stores. The job store holds <em>in-progress</em> and <em>recently completed</em> analysis results in RAM. The database holds <em>portfolio metadata</em> and <em>cached scores</em> on disk. Copy the fields you need (score, recommendation, summary) from the job result into the database immediately after a job completes — don't rely on the job store being there later.</p>
+
+  <h4>5. APScheduler and uvicorn workers</h4>
+  <p>If you ever run uvicorn with <code>--workers 2</code> (multiple processes), each worker will start its own scheduler and the quarterly refresh will run twice simultaneously. For v1 (single worker, local use) this is not a problem. Document it as a known limitation.</p>
+
+  <h4>6. Ranking snapshots are immutable once written</h4>
+  <p>Never update an existing <code>RankingSnapshot</code>. Always insert a new one. This preserves the full history. The current live ranking is always derived on-the-fly from the current <code>overall_score</code> values on <code>PortfolioStock</code> rows.</p>
+
+  <h4>7. TypeScript types must mirror Python schemas exactly</h4>
+  <p>Every field in <code>schemas/portfolio.py</code> must have a corresponding field in <code>types/portfolio.ts</code>. If you add a field to the Python schema and forget to add it to TypeScript, the UI will silently ignore it. Use <code>Optional</code> in Python and <code>| null</code> in TypeScript for nullable fields — and check both sides whenever you change a schema.</p>
+
+  <h4>8. The "View" button after a restart</h4>
+  <p>The job store is in-memory and clears on restart. Store the key report fields in the database (score, recommendation, summary). For the "View" button, always check if the job still exists before navigating. If not, offer to regenerate — don't show a broken page.</p>
+
+
+  
+  <h2>11 · Recommended Implementation Order</h2>
+
+  <table class="order-table">
+    <tr><th>Step</th><th>What to build</th><th>Why first</th></tr>
+    <tr>
+      <td>1</td>
+      <td>SQLAlchemy models + <code>database.py</code> + <code>init_db()</code></td>
+      <td>Everything else depends on the schema. Wire into <code>main.py</code> lifespan immediately so tables are created on startup.</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Pydantic schemas in <code>schemas/portfolio.py</code></td>
+      <td>Defines the contract between backend and frontend before either is built.</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><code>crud.py</code> — create/get/list/update/delete portfolio + add/remove stock</td>
+      <td>Pure DB logic, easy to unit-test in isolation before routes exist.</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><code>api/routes/portfolios.py</code> — CRUD endpoints only (no refresh, no history yet)</td>
+      <td>Unblocks frontend work. Test with <code>curl</code> or the Swagger UI at <code>/docs</code>.</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>TypeScript types + <code>portfolioApi.ts</code> + <code>usePortfolios.ts</code></td>
+      <td>Foundation for all UI components.</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Portfolio tab UI: <code>Portfolio.tsx</code>, <code>PortfolioList.tsx</code>, <code>PortfolioDetail.tsx</code>, <code>PortfolioFormModal.tsx</code></td>
+      <td>CRUD in the UI. At this point create/edit/delete/view/remove all work end-to-end.</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>"Add to Portfolio" button + <code>AddToPortfolioModal.tsx</code> on the Report page</td>
+      <td>Closes the loop between the report flow and the portfolio flow.</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><code>ranking.py</code> + ranking endpoint + live ranking display in <code>PortfolioDetail</code></td>
+      <td>Ranking is a pure sort — once scores are stored in the DB it is trivial.</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Manual refresh endpoint + "↻ Refresh Now" button in the UI</td>
+      <td>Verifies the refresh pipeline end-to-end before adding the scheduler.</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Ranking snapshot save (called after each refresh) + history endpoints</td>
+      <td>Snapshots are written as a side-effect of refresh — already tested in step 9.</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td><code>RankingHistory.tsx</code> component</td>
+      <td>UI for history; straightforward once the endpoints exist.</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>APScheduler quarterly refresh in <code>scheduler.py</code></td>
+      <td>Last because it reuses all the above. Set the cron to fire every 5 minutes during development to test it easily, then revert to quarterly.</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>Tests: <code>test_portfolios.py</code></td>
+      <td>Add tests for CRUD, ranking, and the refresh logic after each step, or as a final pass.</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td><code>docker-compose.yml</code>: add <code>db_data</code> volume + update <code>.env.example</code></td>
+      <td>Infrastructure last — everything can be tested locally before containerising.</td>
+    </tr>
+  </table>
+
+  <hr />
+  <p class="note" style="text-align:center">All field names, class names, file paths, and endpoint paths in this plan are grounded in the existing codebase (<code>schemas/report.py</code>, <code>schemas/analysis.py</code>, <code>core/orchestrator.py</code>, <code>data/source_registry.py</code>). No new data-source or analysis logic is required — the portfolio module is purely orchestration, persistence, and UI on top of what already exists.</p>
+
+  <footer>Made with IBM Bob</footer>
+</div>
+</body>
+</html>

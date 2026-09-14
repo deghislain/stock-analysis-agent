@@ -8,9 +8,13 @@ lifetime of the process.  Tests can override them with ``app.dependency_override
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Generator
+
+from sqlalchemy.orm import Session
 
 from app.core.job_store import JobStore
 from app.core.orchestrator import Orchestrator
+from app.portfolio.database import SessionLocal
 
 
 # ── Singletons ────────────────────────────────────────────────────────────────
@@ -50,3 +54,21 @@ def get_orchestrator() -> Orchestrator:
         async def analyse(orch: Orchestrator = Depends(get_orchestrator)): ...
     """
     return _orchestrator()
+
+
+def get_db() -> Generator[Session, None, None]:
+    """
+    FastAPI dependency that opens a SQLAlchemy ``Session`` for the portfolio
+    database, yields it to the route handler, then closes it when the
+    request is done — whether it succeeded or raised an exception.
+
+    Usage::
+
+        @router.get("/portfolios")
+        def list_portfolios(db: Session = Depends(get_db)): ...
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

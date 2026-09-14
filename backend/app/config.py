@@ -87,6 +87,27 @@ class Settings(BaseSettings):
         description="Maximum age (seconds) a PDF file is kept before being deleted.",
     )
 
+    # ── Portfolio / persistence ───────────────────────────────────────────────
+
+    database_url: str = Field(
+        default="sqlite:///./portfolios.db",
+        description=(
+            "SQLAlchemy database URL for the portfolio persistence layer. "
+            "Defaults to a local SQLite file (`portfolios.db`) in the working directory. "
+            "Override to `sqlite:////app/data/portfolios.db` in Docker so the file lands "
+            "on the named volume instead of inside the container layer."
+        ),
+    )
+
+    quarterly_refresh_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable the APScheduler quarterly refresh job. "
+            "Set to `false` during development or testing to prevent the scheduler "
+            "from firing background analysis jobs automatically."
+        ),
+    )
+
 
 # Module-level singleton — import this everywhere instead of instantiating Settings() directly.
 settings = Settings()
