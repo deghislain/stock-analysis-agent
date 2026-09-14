@@ -28,6 +28,7 @@ from app.config import settings
 from app.logger import configure_logging, get_logger
 from app.api.routes.analysis import router as analysis_router
 from app.api.routes.report import router as report_router
+from app.api.routes.portfolios import router as portfolios_router
 from app.portfolio.database import init_db
 
 # Configure logging as the very first thing so all subsequent log calls
@@ -173,6 +174,7 @@ def create_app() -> FastAPI:
     # All API routes live under /api so they are easy to proxy in production.
     application.include_router(analysis_router, prefix="/api", tags=["analysis"])
     application.include_router(report_router, prefix="/api", tags=["report"])
+    application.include_router(portfolios_router, prefix="/api", tags=["portfolios"])
 
     # ── Health check ──────────────────────────────────────────────────────────
     # Registered here (inside the factory) so every app instance created by
