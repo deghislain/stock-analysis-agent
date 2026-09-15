@@ -33,7 +33,7 @@ COPY app/ ./app/
 # (PDF_OUTPUT_DIR is overridden to /app/pdf_reports in docker-compose.yml).
 # main.py also calls os.makedirs at startup so the directory is always present;
 # we create it here so the volume mount inherits the correct ownership.
-RUN mkdir -p /app/pdf_reports \
+RUN mkdir -p /app/pdf_reports /app/data \
  && chown -R appuser:appgroup /app
 
 USER appuser

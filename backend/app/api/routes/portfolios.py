@@ -166,6 +166,7 @@ def update_portfolio(
 @router.delete(
     "/portfolios/{portfolio_id}",
     status_code=http_status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Delete a portfolio",
     description=(
         "Delete a portfolio and all its stocks and ranking snapshots. "
@@ -240,9 +241,20 @@ def add_stock(
         )
 
     # ── Extract report data ───────────────────────────────────────────────────
-    # job.result may be a dict or a ReportPayload model instance.
+    # job.result is stored by the orchestrator as a plain dict whose nested
+    # values may still be Pydantic model instances (e.g. fundamental_result is
+    # a FundamentalResult object, not a nested dict).  Normalise shallowly:
+    # convert any Pydantic value inside the dict to its own plain dict so
+    # every subsequent .get() call works correctly.
     result = job.result
-    report: dict = result if isinstance(result, dict) else result.model_dump()
+    if isinstance(result, dict):
+        from pydantic import BaseModel as _BaseModel
+        report: dict = {
+            k: v.model_dump() if isinstance(v, _BaseModel) else v
+            for k, v in result.items()
+        }
+    else:
+        report = result.model_dump()
 
     # Pull company name from the report payload for immediate display.
     company_name: str = (
@@ -271,6 +283,7 @@ def add_stock(
 @router.delete(
     "/portfolios/{portfolio_id}/stocks/{ticker}",
     status_code=http_status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Remove a stock from a portfolio",
     description=(
         "Remove a stock from a portfolio. "

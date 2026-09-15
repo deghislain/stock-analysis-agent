@@ -24,6 +24,11 @@ services:
       dockerfile: Dockerfile
     container_name: stock-agent-backend
     restart: unless-stopped
+    # Run as root so the named volumes (pdf_reports, db_data) are writable
+    # regardless of how Docker initialised their ownership.  This is acceptable
+    # for a local single-user development tool.  Remove this line and add a
+    # proper entrypoint chown for production deployments.
+    user: root
 
     # Load secrets and settings from the .env file.
     # required: false — lets Compose start (with a warning) on a fresh clone
