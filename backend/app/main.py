@@ -29,7 +29,8 @@ from app.logger import configure_logging, get_logger
 from app.api.routes.analysis import router as analysis_router
 from app.api.routes.report import router as report_router
 from app.api.routes.portfolios import router as portfolios_router
-from app.portfolio.database import init_db
+from app.portfolio.database import init_db, SessionLocal
+from app.portfolio.scheduler import start_scheduler, stop_scheduler
 
 # Configure logging as the very first thing so all subsequent log calls
 # (including those that fire during import) use the right format.
@@ -114,8 +115,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     - Creates the PDF output directory if it does not exist.
     - Launches the PDF cleanup background task.
     - Calls init_db() to create portfolio tables (no-op when they already exist).
-    - Cancels the cleanup task cleanly on shutdown.
+    - Starts the APScheduler quarterly refresh scheduler.
+    - Cancels the cleanup task and stops the scheduler cleanly on shutdown.
     """
+    from app.api.dependencies import get_job_store, get_orchestrator  # avoid circular import
+
     # ── Startup ───────────────────────────────────────────────────────────────
     pdf_dir = settings.pdf_output_dir
     os.makedirs(pdf_dir, exist_ok=True)
@@ -123,12 +127,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     init_db()
 
+    # Resolve the shared orchestrator and job-store singletons that are also
+    # used by the route handlers, then pass them to the scheduler.
+    _job_store = get_job_store()
+    _orchestrator = get_orchestrator()
+    start_scheduler(_orchestrator, _job_store, SessionLocal)
+
     cleanup_task = asyncio.create_task(_pdf_cleanup_loop())
     logger.info("Application startup complete", extra={"app": settings.app_name})
 
     yield  # application is running
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
+    stop_scheduler()
     cleanup_task.cancel()
     try:
         await cleanup_task
