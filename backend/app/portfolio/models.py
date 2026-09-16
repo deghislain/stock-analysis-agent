@@ -1,7 +1,7 @@
 """
 SQLAlchemy ORM table definitions for the Portfolio module (Sub-Task P1).
 
-Four tables are defined here:
+Five tables are defined here:
 
     Portfolio         — a named collection of stocks created by the user.
     PortfolioStock    — a single stock entry inside a portfolio, with cached
@@ -10,6 +10,9 @@ Four tables are defined here:
                         written on every manual refresh or quarterly scheduler run.
     RankingEntry      — one row per stock inside a ``RankingSnapshot``, holding
                         the full score breakdown captured at snapshot time.
+    ReportCache       — persisted copy of every completed ReportPayload, keyed by
+                        job_id.  Survives server restarts so portfolio "View" links
+                        remain functional after the in-memory JobStore is cleared.
 
 Design notes
 ────────────
@@ -335,3 +338,52 @@ class RankingEntry(Base):
 
     snapshot = relationship("RankingSnapshot", back_populates="entries")
     """The parent ``RankingSnapshot`` this entry belongs to."""
+
+
+# ── ReportCache ───────────────────────────────────────────────────────────────
+
+
+class ReportCache(Base):
+    """
+    A persisted copy of a completed ``ReportPayload``, keyed by ``job_id``.
+
+    Written once by the orchestrator the moment a job reaches ``"complete"``
+    status.  Never updated — each new analysis run creates a new row with a
+    fresh ``job_id``.
+
+    Purpose
+    ───────
+    The in-memory ``JobStore`` is cleared on every server restart, which causes
+    the ``GET /api/report/{job_id}`` endpoint to return 404 for any job whose
+    ID is stored in a ``PortfolioStock.latest_report_id``.  This table provides
+    a persistent fallback: the report route tries the job store first, and falls
+    back to this table when the job is not found in memory.
+
+    Storage format
+    ──────────────
+    ``payload_json`` stores the full ``ReportPayload`` serialised as a JSON
+    string via ``model.model_dump(mode="json")``.  The report route deserialises
+    it back into a ``ReportPayload`` Pydantic model before returning the response.
+    """
+
+    __tablename__ = "report_cache"
+
+    job_id: str = Column(String, primary_key=True)
+    """
+    The analysis job's UUID string — matches ``ReportPayload.job_id`` exactly.
+    Used as the primary key so lookups are O(1) index scans.
+    """
+
+    ticker: str = Column(String(10), nullable=False, index=True)
+    """Upper-case ticker symbol — stored for potential future queries by ticker."""
+
+    payload_json: str = Column(Text, nullable=False)
+    """
+    Full ``ReportPayload`` serialised as a JSON string.
+
+    Deserialised by the report route handler via
+    ``ReportPayload.model_validate_json(row.payload_json)``.
+    """
+
+    created_at: datetime = Column(DateTime, default=datetime.utcnow)
+    """UTC datetime when this cache row was first inserted."""

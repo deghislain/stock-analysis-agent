@@ -27,10 +27,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from fastapi.responses import FileResponse
 
-from app.api.dependencies import get_job_store
+from app.api.dependencies import get_db, get_job_store
 from app.core.job_store import JobStore
 from app.logger import get_logger
+from app.portfolio import crud
 from app.schemas.report import JobStatusResponse, ReportPayload
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 
@@ -56,16 +58,29 @@ router = APIRouter()
 async def get_report(
     job_id: str,
     store: JobStore = Depends(get_job_store),
+    db: Session = Depends(get_db),
 ) -> JobStatusResponse | ReportPayload:
     """
     Retrieve the current state of an analysis job.
 
     - ``"pending"`` / ``"running"`` / ``"error"`` → ``JobStatusResponse``
     - ``"complete"`` → ``ReportPayload`` (full analysis result)
+    - Unknown ``job_id`` in memory but found in DB cache → ``ReportPayload``
     - Unknown ``job_id`` → HTTP 404
     """
     job = store.get_job(job_id)
+
     if job is None:
+        # The in-memory JobStore was cleared (server restart).
+        # Fall back to the persistent report cache in the database.
+        cached = crud.get_report_cache(db, job_id)
+        if cached is not None:
+            logger.debug(
+                "Serving report from DB cache (job not in memory)",
+                extra={"job_id": job_id},
+            )
+            return ReportPayload.model_validate_json(cached.payload_json)
+
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Job '{job_id}' not found.",
@@ -103,6 +118,7 @@ async def get_report(
 async def get_report_pdf(
     job_id: str,
     store: JobStore = Depends(get_job_store),
+    db: Session = Depends(get_db),
 ) -> FileResponse:
     """
     Serve the PDF for a completed analysis job.
@@ -113,29 +129,34 @@ async def get_report_pdf(
     - Otherwise → ``FileResponse`` (``application/pdf``, attachment)
     """
     job = store.get_job(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Job '{job_id}' not found.",
-        )
-
-    if job.status != "complete":
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"PDF is not available: job '{job_id}' has status '{job.status}'. "
-                "Wait until the job is complete before downloading the PDF."
-            ),
-        )
-
-    # Retrieve pdf_path from the stored result.
-    result = job.result
     pdf_path: str | None = None
 
-    if isinstance(result, dict):
-        pdf_path = result.get("pdf_path")
-    elif hasattr(result, "pdf_path"):
-        pdf_path = result.pdf_path
+    if job is None:
+        # Fall back to the persistent DB cache (server may have restarted).
+        cached = crud.get_report_cache(db, job_id)
+        if cached is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{job_id}' not found.",
+            )
+        cached_payload = ReportPayload.model_validate_json(cached.payload_json)
+        pdf_path = cached_payload.pdf_path
+    else:
+        if job.status != "complete":
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"PDF is not available: job '{job_id}' has status '{job.status}'. "
+                    "Wait until the job is complete before downloading the PDF."
+                ),
+            )
+
+        # Retrieve pdf_path from the stored result.
+        result = job.result
+        if isinstance(result, dict):
+            pdf_path = result.get("pdf_path")
+        elif hasattr(result, "pdf_path"):
+            pdf_path = result.pdf_path
 
     if not pdf_path:
         raise HTTPException(

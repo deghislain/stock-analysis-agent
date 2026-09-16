@@ -60,6 +60,7 @@ from app.core.job_store import JobStore
 from app.logger import get_logger
 from app.report.pdf_generator import PDFGenerator
 from app.schemas.analysis import AnalysisResult
+from app.schemas.report import ReportPayload
 
 if TYPE_CHECKING:
     from app.data.base_source import StockData
@@ -163,6 +164,12 @@ class Orchestrator:
             )
             logger.info("Orchestrator complete", extra={"ticker": ticker, "job_id": job_id})
 
+            # Persist the payload to the database so it survives server restarts.
+            # This is a best-effort write — a DB failure must never crash the job.
+            await asyncio.get_event_loop().run_in_executor(
+                None, self._persist_report_cache, payload, job_id, ticker
+            )
+
         except Exception as exc:  # noqa: BLE001
             error_msg = str(exc)
             logger.error(
@@ -174,6 +181,62 @@ class Orchestrator:
                 status="error",
                 current_step=None,
                 error=error_msg,
+            )
+
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _persist_report_cache(self, payload: dict, job_id: str, ticker: str) -> None:
+        """
+        Write the completed ``ReportPayload`` to the persistent ``report_cache``
+        table so it survives server restarts.
+
+        This method is called from a thread-pool executor (``run_in_executor``)
+        because the SQLAlchemy session is synchronous and must not block the
+        event loop.  It is deliberately non-async so it can be submitted to the
+        executor without wrapping.
+
+        Failures are caught and logged as warnings — a DB write error must never
+        propagate back to the main ``run()`` method and invalidate an otherwise
+        complete job.
+
+        Parameters
+        ----------
+        payload:
+            The assembled ``ReportPayload`` dict returned by ``_execute()``.
+        job_id:
+            UUID string of the completed job.
+        ticker:
+            Upper-case ticker symbol (used as the ``ticker`` column value).
+        """
+        try:
+            from app.portfolio.crud import save_report_cache
+            from app.portfolio.database import SessionLocal
+
+            # Serialise the payload to JSON.  The payload is a plain dict whose
+            # nested values may still be Pydantic model instances; coerce them
+            # via ``ReportPayload`` so ``model_dump(mode="json")`` works cleanly.
+            if isinstance(payload, dict):
+                report_model = ReportPayload(**payload)
+            else:
+                report_model = payload  # already a ReportPayload instance
+
+            payload_json = report_model.model_dump_json()
+
+            db = SessionLocal()
+            try:
+                save_report_cache(db, job_id=job_id, ticker=ticker, payload_json=payload_json)
+            finally:
+                db.close()
+
+            logger.debug(
+                "Report cached to DB",
+                extra={"job_id": job_id, "ticker": ticker},
+            )
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to cache report to DB — report is still available in memory",
+                extra={"job_id": job_id, "ticker": ticker, "error": str(exc)},
             )
 
     # ── Private pipeline ──────────────────────────────────────────────────────

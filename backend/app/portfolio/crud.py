@@ -52,6 +52,7 @@ from app.portfolio.models import (
     PortfolioStock,
     RankingEntry,
     RankingSnapshot,
+    ReportCache,
 )
 
 
@@ -489,3 +490,71 @@ def get_snapshot(
         .filter(RankingSnapshot.id == snapshot_id)
         .first()
     )
+
+
+# ── Report cache ──────────────────────────────────────────────────────────────
+
+
+def save_report_cache(
+    db: Session,
+    job_id: str,
+    ticker: str,
+    payload_json: str,
+) -> ReportCache:
+    """
+    Persist a completed ``ReportPayload`` JSON string to the ``report_cache`` table.
+
+    Called once per completed job by the orchestrator.  If a row with the same
+    ``job_id`` already exists (e.g. a double-write from the scheduler) the
+    existing row is left unchanged — INSERT OR IGNORE semantics are achieved by
+    checking before inserting.
+
+    Parameters
+    ----------
+    db:
+        Active SQLAlchemy session (a short-lived session opened by the caller —
+        the orchestrator uses ``SessionLocal()`` directly, not ``get_db()``).
+    job_id:
+        UUID string of the completed job — used as the primary key.
+    ticker:
+        Upper-case ticker symbol for the report.
+    payload_json:
+        Full ``ReportPayload`` serialised as a compact JSON string.
+
+    Returns
+    -------
+    ReportCache
+        The committed ``ReportCache`` row (new or pre-existing).
+    """
+    existing = db.get(ReportCache, job_id)
+    if existing is not None:
+        return existing
+
+    row = ReportCache(
+        job_id=job_id,
+        ticker=ticker.upper(),
+        payload_json=payload_json,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_report_cache(db: Session, job_id: str) -> ReportCache | None:
+    """
+    Fetch a cached ``ReportPayload`` row by ``job_id``.
+
+    Parameters
+    ----------
+    db:
+        Active SQLAlchemy session.
+    job_id:
+        UUID string of the job whose cached payload to retrieve.
+
+    Returns
+    -------
+    ReportCache | None
+        The matching row, or ``None`` when not found.
+    """
+    return db.get(ReportCache, job_id)

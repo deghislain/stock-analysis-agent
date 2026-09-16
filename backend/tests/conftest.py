@@ -123,6 +123,21 @@ def _make_report_payload(
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_real_db_tables():
+    """
+    Ensure the real ``portfolios.db`` used by ``_make_client()`` in ``test_api.py``
+    has all tables (including ``report_cache`` added after the initial migration).
+
+    This is a session-scoped autouse fixture so it runs exactly once before any
+    test that uses the real ``SessionLocal``.  ``init_db()`` calls
+    ``Base.metadata.create_all()`` which is idempotent — safe to run even when
+    tables already exist.
+    """
+    from app.portfolio.database import init_db
+    init_db()
+
+
 @pytest.fixture(scope="session")
 def engine():
     """
