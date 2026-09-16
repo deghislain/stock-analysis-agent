@@ -26,14 +26,32 @@
  *   respect to selection.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import PortfolioList from '../components/portfolio/PortfolioList'
 import PortfolioDetail from '../components/portfolio/PortfolioDetail'
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function Portfolio() {
-  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(null)
+  const location = useLocation()
+
+  // If the user arrived here via "View Portfolio" from AddToPortfolioModal,
+  // the modal passes { portfolioId } in router state so we can auto-select it.
+  const incomingId =
+    (location.state as { portfolioId?: string } | null)?.portfolioId ?? null
+
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(incomingId)
+
+  // Clear the router state after consuming it so a back-navigation doesn't
+  // re-select a stale portfolio.
+  useEffect(() => {
+    if (incomingId) {
+      window.history.replaceState({}, '')
+    }
+  // Only run once on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

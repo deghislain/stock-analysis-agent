@@ -42,6 +42,7 @@
  */
 
 import { useState, useEffect, useRef, type KeyboardEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   usePortfolios,
   useCreatePortfolio,
@@ -69,6 +70,7 @@ export default function AddToPortfolioModal({
   ticker,
   jobId,
 }: AddToPortfolioModalProps) {
+  const navigate = useNavigate()
   const { data: portfolios, isLoading: portfoliosLoading } = usePortfolios()
 
   const createMutation = useCreatePortfolio()
@@ -78,6 +80,13 @@ export default function AddToPortfolioModal({
 
   /** UUID of the selected portfolio from the dropdown, or "" when nothing chosen. */
   const [selectedId, setSelectedId] = useState<string>('')
+
+  /**
+   * The portfolio ID that was used for the successful add.
+   * Stored separately so the "View in Portfolio" link still works after
+   * selectedId is reset on the next open.
+   */
+  const [addedToPortfolioId, setAddedToPortfolioId] = useState<string | null>(null)
 
   /** Whether the inline "create new" name field is visible. */
   const [showCreate, setShowCreate] = useState(false)
@@ -161,12 +170,18 @@ export default function AddToPortfolioModal({
         body: { ticker, job_id: jobId },
       })
 
+      setAddedToPortfolioId(portfolioId)
       setSucceeded(true)
-      // Auto-close after a short confirmation pause.
-      setTimeout(onClose, 1200)
+      // Do NOT auto-close — let the user choose to navigate to the portfolio
+      // or dismiss manually via the "Done" button.
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'An unexpected error occurred.')
     }
+  }
+
+  function handleViewPortfolio() {
+    onClose()
+    navigate('/portfolio', { state: { portfolioId: addedToPortfolioId } })
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
@@ -219,15 +234,37 @@ export default function AddToPortfolioModal({
 
         {/* ── Success state ──────────────────────────────────────────────── */}
         {succeeded && (
-          <div
-            role="status"
-            className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-3 text-sm text-green-700"
-          >
-            <CheckCircleIcon />
-            <span>
-              <span className="font-mono font-semibold">{ticker}</span>
-              {' '}added successfully!
-            </span>
+          <div className="space-y-4">
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-3 text-sm text-green-700"
+            >
+              <CheckCircleIcon />
+              <span>
+                <span className="font-mono font-semibold">{ticker}</span>
+                {' '}added successfully!
+              </span>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className={[
+                  'rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium',
+                  'text-gray-700 bg-white hover:bg-gray-50 transition-colors',
+                ].join(' ')}
+              >
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={handleViewPortfolio}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 transition-colors"
+              >
+                View Portfolio
+                <ArrowRightIcon />
+              </button>
+            </div>
           </div>
         )}
 
@@ -411,6 +448,14 @@ function SpinnerIcon({ className = 'h-5 w-5' }: { className?: string }) {
     <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  )
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
     </svg>
   )
 }
