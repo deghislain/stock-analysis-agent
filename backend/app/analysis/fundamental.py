@@ -102,7 +102,7 @@ class FundamentalAnalyser:
 
 def _pe_ratio(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
     """Extract P/E ratio; tries Yahoo ``trailingPE`` then FMP ``peRatioTTM``."""
-    value = _coerce(info.get("trailingPE") or fins.get("peRatioTTM"))
+    value = _coerce(info.get("trailingPE")) if info.get("trailingPE") is not None else _coerce(fins.get("peRatioTTM"))
     if value is None:
         warnings.append("P/E ratio is unavailable — trailingPE / peRatioTTM not found in source data.")
     return FundamentalMetric(
@@ -128,7 +128,7 @@ def _eps(info: dict, warnings: list[str]) -> FundamentalMetric:
 
 def _pb_ratio(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
     """Extract P/B ratio; tries Yahoo ``priceToBook`` then FMP ``pbRatioTTM``."""
-    value = _coerce(info.get("priceToBook") or fins.get("pbRatioTTM"))
+    value = _coerce(info.get("priceToBook")) if info.get("priceToBook") is not None else _coerce(fins.get("pbRatioTTM"))
     if value is None:
         warnings.append("P/B ratio is unavailable — priceToBook / pbRatioTTM not found in source data.")
     return FundamentalMetric(
@@ -141,7 +141,7 @@ def _pb_ratio(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
 
 def _debt_to_equity(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
     """Extract D/E ratio; tries Yahoo ``debtToEquity`` then FMP ``debtToEquityRatioTTM``."""
-    value = _coerce(info.get("debtToEquity") or fins.get("debtToEquityRatioTTM"))
+    value = _coerce(info.get("debtToEquity")) if info.get("debtToEquity") is not None else _coerce(fins.get("debtToEquityRatioTTM"))
     # Yahoo reports debtToEquity as a percentage (e.g. 170 = 1.70x); normalise to ratio.
     if value is not None and value > 20:
         value = round(value / 100, 4)
@@ -157,7 +157,7 @@ def _debt_to_equity(info: dict, fins: dict, warnings: list[str]) -> FundamentalM
 
 def _profit_margin(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
     """Extract net profit margin; tries Yahoo ``profitMargins`` then FMP ``netProfitMarginTTM``."""
-    raw = info.get("profitMargins") or fins.get("netProfitMarginTTM")
+    raw = info.get("profitMargins") if info.get("profitMargins") is not None else fins.get("netProfitMarginTTM")
     value = _coerce(raw)
     # Normalise to percentage: Yahoo returns 0–1 fractions; FMP also returns 0–1.
     if value is not None:
@@ -174,7 +174,7 @@ def _profit_margin(info: dict, fins: dict, warnings: list[str]) -> FundamentalMe
 
 def _revenue_growth(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
     """Extract revenue growth; tries Yahoo ``revenueGrowth`` then FMP ``revenueGrowthTTM``."""
-    raw = info.get("revenueGrowth") or fins.get("revenueGrowthTTM")
+    raw = info.get("revenueGrowth") if info.get("revenueGrowth") is not None else fins.get("revenueGrowthTTM")
     value = _coerce(raw)
     # Normalise to percentage.
     if value is not None:
@@ -191,7 +191,7 @@ def _revenue_growth(info: dict, fins: dict, warnings: list[str]) -> FundamentalM
 
 def _dividend_yield(info: dict, fins: dict, warnings: list[str]) -> FundamentalMetric:
     """Extract dividend yield; tries Yahoo ``dividendYield`` then FMP ``dividendYieldTTM``."""
-    raw = info.get("dividendYield") or fins.get("dividendYieldTTM")
+    raw = info.get("dividendYield") if info.get("dividendYield") is not None else fins.get("dividendYieldTTM")
     value = _coerce(raw)
     # Normalise to percentage.
     if value is not None:
@@ -227,7 +227,7 @@ def _compute_score(
 
     Thresholds (approximate large-cap benchmarks):
         P/E   < 15 → 100, 15–25 → 70, 25–40 → 45, > 40 → 20, negative → 10
-        P/B   < 1  → 100, 1–3   → 75, 3–10  → 45, > 10  → 15
+        P/B   negative → 10, < 1 → 100, 1–3 → 75, 3–10 → 45, > 10 → 15
         D/E   < 0.5 → 100, 0.5–1 → 75, 1–2 → 50, > 2 → 20
         Margin > 20% → 100, 10–20% → 75, 0–10% → 45, negative → 10
         Growth > 15% → 100, 5–15% → 75, 0–5% → 50, negative → 20
@@ -247,7 +247,9 @@ def _compute_score(
             sub_scores.append(20.0)
 
     if pb is not None:
-        if pb < 1:
+        if pb < 0:
+            sub_scores.append(10.0)
+        elif pb < 1:
             sub_scores.append(100.0)
         elif pb < 3:
             sub_scores.append(75.0)
