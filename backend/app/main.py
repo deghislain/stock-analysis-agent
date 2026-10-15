@@ -29,6 +29,7 @@ from app.logger import configure_logging, get_logger
 from app.api.routes.analysis import router as analysis_router
 from app.api.routes.report import router as report_router
 from app.api.routes.portfolios import router as portfolios_router
+from app.api.routes.screener import router as screener_router
 from app.portfolio.database import init_db, SessionLocal
 from app.portfolio.scheduler import start_scheduler, stop_scheduler
 
@@ -186,6 +187,7 @@ def create_app() -> FastAPI:
     application.include_router(analysis_router, prefix="/api", tags=["analysis"])
     application.include_router(report_router, prefix="/api", tags=["report"])
     application.include_router(portfolios_router, prefix="/api", tags=["portfolios"])
+    application.include_router(screener_router, prefix="/api", tags=["screener"])
 
     # ── Health check ──────────────────────────────────────────────────────────
     # Registered here (inside the factory) so every app instance created by

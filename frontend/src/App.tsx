@@ -5,14 +5,16 @@
  *   /                   → Home page  (ticker entry)
  *   /report/:jobId      → Report page (dashboard + PDF download)
  *   /portfolio          → Portfolio page (two-panel portfolio manager)
+ *   /screener           → Screener page (undervalued growth stock search)
  *   *                   → Redirects unknown paths back to Home
  *
  * Navigation bar
  * ──────────────
- * The "Analysis" / "Portfolio" tab bar is rendered by the shared
- * ``<WithNav>`` layout wrapper, which wraps only the ``/`` and ``/portfolio``
- * routes.  The ``/report/:jobId`` route is excluded intentionally — it has its
- * own sticky header that would conflict with a second nav bar.
+ * The "Analysis" / "Portfolio" / "Screener" tab bar is rendered by the shared
+ * ``<WithNav>`` layout wrapper, which wraps only the ``/``, ``/portfolio``,
+ * and ``/screener`` routes.  The ``/report/:jobId`` route is excluded
+ * intentionally — it has its own sticky header that would conflict with a
+ * second nav bar.
  *
  * This component is intentionally minimal — it only owns routing and the
  * shared navigation shell.  All layout and business logic lives in the
@@ -24,6 +26,7 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet } from 'react-r
 import Home from './pages/Home'
 import Report from './pages/Report'
 import Portfolio from './pages/Portfolio'
+import Screener from './pages/Screener'
 
 // ── Shared nav layout ─────────────────────────────────────────────────────────
 
@@ -76,6 +79,19 @@ function WithNav() {
             >
               Portfolio
             </NavLink>
+            <NavLink
+              to="/screener"
+              className={({ isActive }) =>
+                [
+                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-brand-50 text-brand-700'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                ].join(' ')
+              }
+            >
+              Screener
+            </NavLink>
           </nav>
 
         </div>
@@ -99,6 +115,7 @@ export default function App() {
         <Route element={<WithNav />}>
           <Route path="/" element={<Home />} />
           <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/screener" element={<Screener />} />
         </Route>
 
         {/* Report has its own sticky header — no shared nav */}
