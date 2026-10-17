@@ -15,8 +15,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { getIndustries, searchStocks } from '../services/screenerApi'
+import { analyseStock } from '../services/api'
 import type { ScreenerCriterion, ScreenerStock } from '../types/screener'
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
@@ -110,8 +110,6 @@ function CriteriaLegend({ criteria }: { criteria: ScreenerCriterion[] }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function Screener() {
-  const navigate = useNavigate()
-
   // ── Form state ───────────────────────────────────────────────────────────
   const [industry, setIndustry] = useState('')
   const [minPrice, setMinPrice] = useState('')
@@ -128,6 +126,11 @@ export default function Screener() {
   const [total, setTotal]         = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError]         = useState<string | null>(null)
+
+  // ── Per-row analyse state ────────────────────────────────────────────────
+  // Tracks which tickers are currently submitting and which failed to start.
+  const [analysingTickers, setAnalysingTickers] = useState<Set<string>>(new Set())
+  const [analyseErrors, setAnalyseErrors]       = useState<Record<string, string>>({})
 
   const abortRef = useRef<AbortController | null>(null)
 
@@ -182,10 +185,26 @@ export default function Screener() {
     }
   }
 
-  // ── Analyse link ──────────────────────────────────────────────────────────
+  // ── Analyse handler ───────────────────────────────────────────────────────
+  // Submits POST /api/analyse for the ticker, then opens /report/:jobId in a
+  // new browser tab. The tab is named after the ticker so repeated clicks on
+  // the same stock reuse the same tab rather than opening a new one each time.
 
-  function handleAnalyse(ticker: string) {
-    navigate(`/?ticker=${encodeURIComponent(ticker)}`)
+  async function handleAnalyse(ticker: string) {
+    // Mark this row as submitting.
+    setAnalysingTickers((prev) => new Set(prev).add(ticker))
+    setAnalyseErrors((prev) => { const n = { ...prev }; delete n[ticker]; return n })
+
+    try {
+      const { job_id } = await analyseStock(ticker)
+      // Open (or reuse) a tab named after the ticker and navigate to the report.
+      window.open(`/report/${encodeURIComponent(job_id)}`, ticker)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not start analysis.'
+      setAnalyseErrors((prev) => ({ ...prev, [ticker]: msg }))
+    } finally {
+      setAnalysingTickers((prev) => { const n = new Set(prev); n.delete(ticker); return n })
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -456,13 +475,27 @@ export default function Screener() {
                       </td>
 
                       <td className="px-4 py-2.5 text-center">
-                        <button
-                          onClick={() => handleAnalyse(stock.ticker)}
-                          className="text-xs text-brand-600 hover:text-brand-800 font-medium underline underline-offset-2"
-                          title={`Run full analysis on ${stock.ticker}`}
-                        >
-                          Analyse →
-                        </button>
+                        {analyseErrors[stock.ticker] ? (
+                          <span
+                            className="text-xs text-red-500 cursor-pointer"
+                            title={analyseErrors[stock.ticker]}
+                            onClick={() => handleAnalyse(stock.ticker)}
+                          >
+                            Retry ↺
+                          </span>
+                        ) : analysingTickers.has(stock.ticker) ? (
+                          <span className="text-xs text-gray-400 animate-pulse">
+                            Starting…
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleAnalyse(stock.ticker)}
+                            className="text-xs text-brand-600 hover:text-brand-800 font-medium underline underline-offset-2"
+                            title={`Run full analysis on ${stock.ticker}`}
+                          >
+                            Analyse →
+                          </button>
+                        )}
                       </td>
 
                     </tr>
