@@ -142,6 +142,16 @@ class ReportPayload(BaseModel):
     Empty string when no headlines are available or the LLM fallback is active.
     """
 
+    coach_bullets: list[str] = Field(default_factory=list)
+    """
+    2–4 jargon-free bullet points written by the LLM for a complete beginner.
+
+    Each bullet explains one aspect of the analysis in plain English and
+    suggests what the reader might want to think about next.  Populated by
+    ``ReportAgent``; falls back to two generic tips when the LLM is unavailable.
+    Always labelled as educational — not financial advice.
+    """
+
     # ── Structured analysis results ───────────────────────────────────────────
 
     fundamental_result: FundamentalResult

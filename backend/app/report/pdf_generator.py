@@ -255,6 +255,7 @@ class PDFGenerator:
         story: list = []
         story += self._section_cover()
         story += self._section_executive()
+        story += self._section_coach()
         story += self._section_fundamental()
         story += self._section_technical()
         story += self._section_news()
@@ -324,6 +325,28 @@ class PDFGenerator:
 
         return flowables
 
+    # ── Section: Learning Corner (coach bullets) ──────────────────────────────
+
+    def _section_coach(self) -> list:
+        """Render the 'For Beginners' coach bullets as a shaded box."""
+        bullets: list = self._d.get("coach_bullets", [])
+        if not bullets:
+            return []
+
+        flowables: list = [
+            _p("For Beginners — Learning Corner", "sub_heading"),
+        ]
+        for bullet in bullets:
+            flowables.append(_p(f"*  {bullet}", "body"))
+        flowables.append(
+            _p(
+                "Educational only — not financial advice.",
+                "caption",
+            )
+        )
+        flowables.append(Spacer(1, 0.4 * cm))
+        return flowables
+
     # ── Section: Fundamental Analysis ─────────────────────────────────────────
 
     def _section_fundamental(self) -> list:
@@ -359,18 +382,73 @@ class PDFGenerator:
             ])
 
         score = fr.get("score", 0) if isinstance(fr, dict) else getattr(fr, "score", 0)
+        gqs   = fr.get("growth_quality_score") if isinstance(fr, dict) else getattr(fr, "growth_quality_score", None)
+        peg   = fr.get("peg_ratio") if isinstance(fr, dict) else getattr(fr, "peg_ratio", None)
+
+        # Analyst targets
+        at = fr.get("analyst_targets") if isinstance(fr, dict) else getattr(fr, "analyst_targets", None)
+        if hasattr(at, "model_dump"):
+            at = at.model_dump()
+
+        # Insider signals
+        ins_pct = fr.get("insider_ownership_pct") if isinstance(fr, dict) else getattr(fr, "insider_ownership_pct", None)
+        ins_act = fr.get("insider_net_activity")  if isinstance(fr, dict) else getattr(fr, "insider_net_activity", None)
+
+        # Sector comparison
+        sc = fr.get("sector_comparison") if isinstance(fr, dict) else getattr(fr, "sector_comparison", None)
+        if hasattr(sc, "model_dump"):
+            sc = sc.model_dump()
+
         col_widths = [_CONTENT_W * 0.28, _CONTENT_W * 0.18, _CONTENT_W * 0.54]
         tbl = Table(rows, colWidths=col_widths, repeatRows=1)
         tbl.setStyle(TABLE_STYLE_METRICS)
+
+        score_line = f"Fundamental Score: {score:.0f} / 100"
+        if gqs is not None:
+            score_line += f"   |   Growth Quality: {gqs:.0f} / 100"
+        if peg is not None:
+            score_line += f"   |   PEG: {peg:.2f}"
 
         flowables: list = [
             _p("Fundamental Analysis", "section_heading"),
             _hr(),
             _p("Key Metrics", "sub_heading"),
             tbl,
-            _p(f"Fundamental Score: {score:.0f} / 100", "caption"),
+            _p(score_line, "caption"),
             Spacer(1, 0.3 * cm),
         ]
+
+        # Analyst consensus line
+        if at:
+            consensus = at.get("consensus") or ""
+            mean_t = at.get("mean_target")
+            count  = at.get("analyst_count")
+            at_line = f"Analyst Consensus: {consensus.title()}"
+            if mean_t:
+                at_line += f"  |  Mean target: ${mean_t:,.2f}"
+            if count:
+                at_line += f"  ({count} analysts)"
+            flowables.append(_p(at_line, "caption"))
+
+        # Insider signals line
+        if ins_pct is not None:
+            ins_line = f"Insider Ownership: {ins_pct:.1f}%"
+            if ins_act:
+                ins_line += f"  |  Activity: {ins_act}"
+            flowables.append(_p(ins_line, "caption"))
+
+        # Sector comparison line
+        if sc:
+            sector = sc.get("sector", "")
+            sc_parts = []
+            for key, label in [("pe_vs_sector", "P/E"), ("pb_vs_sector", "P/B"),
+                                ("margin_vs_sector", "Margin"), ("growth_vs_sector", "Growth")]:
+                val = sc.get(key)
+                if val:
+                    sc_parts.append(f"{label}: {val}")
+            if sc_parts:
+                flowables.append(_p(f"Sector ({sector}): {', '.join(sc_parts)}", "caption"))
+
         if explanation:
             flowables.append(_p("Plain-Language Explanation", "sub_heading"))
             flowables.append(_p(explanation, "body"))

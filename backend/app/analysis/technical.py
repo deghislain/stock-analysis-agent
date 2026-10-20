@@ -29,6 +29,7 @@ from typing import Optional
 
 import pandas as pd
 
+from app.config import settings
 from app.data.base_source import StockData
 from app.logger import get_logger
 from app.schemas.analysis import IndicatorSeries, TechnicalResult
@@ -152,7 +153,8 @@ def _sma(close: pd.Series, window: int) -> pd.Series:
     try:
         import ta.trend
         return ta.trend.SMAIndicator(close=close, window=window).sma_indicator()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("SMA(%d) computation failed: %s", window, exc)
         return pd.Series([float("nan")] * len(close), index=close.index)
 
 
@@ -161,7 +163,8 @@ def _ema(close: pd.Series, window: int) -> pd.Series:
     try:
         import ta.trend
         return ta.trend.EMAIndicator(close=close, window=window).ema_indicator()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("EMA(%d) computation failed: %s", window, exc)
         return pd.Series([float("nan")] * len(close), index=close.index)
 
 
@@ -170,7 +173,8 @@ def _rsi(close: pd.Series, window: int) -> pd.Series:
     try:
         import ta.momentum
         return ta.momentum.RSIIndicator(close=close, window=window).rsi()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("RSI(%d) computation failed: %s", window, exc)
         return pd.Series([float("nan")] * len(close), index=close.index)
 
 
@@ -194,7 +198,8 @@ def _macd(
             window_sign=signal,
         )
         return obj.macd(), obj.macd_signal(), obj.macd_diff()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("MACD(%d,%d,%d) computation failed: %s", fast, slow, signal, exc)
         nan_s = pd.Series([float("nan")] * len(close), index=close.index)
         return nan_s, nan_s.copy(), nan_s.copy()
 
@@ -217,7 +222,8 @@ def _bollinger(
             window_dev=window_dev,
         )
         return bb.bollinger_hband(), bb.bollinger_mavg(), bb.bollinger_lband()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Bollinger Bands(%d, %d) computation failed: %s", window, window_dev, exc)
         nan_s = pd.Series([float("nan")] * len(close), index=close.index)
         return nan_s, nan_s.copy(), nan_s.copy()
 
@@ -250,38 +256,41 @@ def _compute_score(
     """
     signals: list[tuple[float, float]] = []   # (raw_score_0_to_1, weight)
 
-    # RSI: < 30 oversold (bullish opportunity) → high score,
-    #       > 70 overbought (sell pressure)    → low score,
-    #       30–70 neutral.
+    # Read configurable thresholds and weights from settings.
+    rsi_oversold, rsi_low, rsi_high, rsi_overbought = settings.rsi_bands
+    w_rsi, w_macd, w_sma20, w_sma50, w_sma200 = settings.signal_weights
+
+    # RSI: oversold (bullish opportunity) → high score,
+    #       overbought (sell pressure)    → low score.
     if rsi is not None:
-        if rsi < 30:
+        if rsi < rsi_oversold:
             rsi_score = 0.85
-        elif rsi < 45:
+        elif rsi < rsi_low:
             rsi_score = 0.70
-        elif rsi <= 55:
+        elif rsi <= rsi_high:
             rsi_score = 0.50
-        elif rsi <= 70:
+        elif rsi <= rsi_overbought:
             rsi_score = 0.35
         else:
             rsi_score = 0.20
-        signals.append((rsi_score, 25.0))
+        signals.append((rsi_score, w_rsi))
 
     # MACD: line above signal → bullish momentum.
     if macd is not None and macd_signal is not None:
         macd_score = 0.75 if macd > macd_signal else 0.25
-        signals.append((macd_score, 25.0))
+        signals.append((macd_score, w_macd))
 
     # Price vs SMA(20): price above → short-term bullish.
     if close is not None and sma_20 is not None:
-        signals.append((0.70 if close > sma_20 else 0.30, 20.0))
+        signals.append((0.70 if close > sma_20 else 0.30, w_sma20))
 
     # Price vs SMA(50): price above → medium-term bullish.
     if close is not None and sma_50 is not None:
-        signals.append((0.70 if close > sma_50 else 0.30, 15.0))
+        signals.append((0.70 if close > sma_50 else 0.30, w_sma50))
 
     # Price vs SMA(200): golden cross proxy.
     if close is not None and sma_200 is not None:
-        signals.append((0.75 if close > sma_200 else 0.25, 15.0))
+        signals.append((0.75 if close > sma_200 else 0.25, w_sma200))
 
     if not signals:
         return 50.0

@@ -315,3 +315,40 @@ class RankingSnapshotOut(BaseModel):
 
     Empty list when the portfolio had no stocks at snapshot time.
     """
+
+
+# ── Watchlist schemas ─────────────────────────────────────────────────────────
+
+
+class WatchlistEntryOut(BaseModel):
+    """A single watchlist entry as returned by ``GET /api/watchlist``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    ticker: str
+    """Upper-case ticker symbol."""
+
+    added_at: datetime
+    """UTC datetime when this ticker was added to the watchlist."""
+
+    last_analysed_at: Optional[datetime] = None
+    """UTC datetime of the most recent completed analysis; ``None`` if never run."""
+
+    overall_score: Optional[float] = None
+    """Latest composite score (0–100); ``None`` if never analysed."""
+
+    recommendation: Optional[str] = None
+    """Latest recommendation; ``None`` if never analysed."""
+
+    latest_job_id: Optional[str] = None
+    """UUID of the most recent completed analysis job; ``None`` if never analysed."""
+
+
+class WatchlistOut(BaseModel):
+    """Response body for ``GET /api/watchlist``."""
+
+    entries: list[WatchlistEntryOut]
+    """All watchlist entries ordered by overall_score descending (unanalysed last)."""
+
+    total: int
+    """Total number of entries in the watchlist."""

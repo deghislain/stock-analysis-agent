@@ -18,10 +18,11 @@ import asyncio
 import logging
 import os
 import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -30,6 +31,7 @@ from app.api.routes.analysis import router as analysis_router
 from app.api.routes.report import router as report_router
 from app.api.routes.portfolios import router as portfolios_router
 from app.api.routes.screener import router as screener_router
+from app.api.routes.watchlist import router as watchlist_router
 from app.portfolio.database import init_db, SessionLocal
 from app.portfolio.scheduler import start_scheduler, stop_scheduler
 
@@ -126,6 +128,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     os.makedirs(pdf_dir, exist_ok=True)
     logger.info("PDF output directory ready", extra={"directory": pdf_dir})
 
+    # Warn early if the API key is missing so the problem is obvious in logs
+    # at boot time rather than surfacing only on the first LLM request.
+    if not settings.groq_api_key:
+        logger.warning(
+            "GROQ_API_KEY is not set — AI-generated explanations will be "
+            "unavailable. Set the env var before starting the server."
+        )
+
+    # Log FinBERT availability so operators know which sentiment path is active.
+    try:
+        import transformers  # noqa: F401
+        logger.info(
+            "FinBERT sentiment: transformers package found — "
+            "ProsusAI/finbert will be loaded on first sentiment request."
+        )
+    except ImportError:
+        logger.warning(
+            "FinBERT sentiment: transformers not installed — "
+            "falling back to keyword-based sentiment scoring."
+        )
+
     init_db()
 
     # Resolve the shared orchestrator and job-store singletons that are also
@@ -173,13 +196,15 @@ def create_app() -> FastAPI:
 
     # ── CORS middleware ───────────────────────────────────────────────────────
     # Allows the React frontend (running on a different port during development)
-    # to call the API.  In production, restrict this to your actual domain.
+    # to call the API.  Only the HTTP methods and headers actually used by the
+    # frontend are allowed — wildcards are avoided so the policy is explicit.
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
     )
 
     # ── Routers ───────────────────────────────────────────────────────────────
@@ -188,14 +213,46 @@ def create_app() -> FastAPI:
     application.include_router(report_router, prefix="/api", tags=["report"])
     application.include_router(portfolios_router, prefix="/api", tags=["portfolios"])
     application.include_router(screener_router, prefix="/api", tags=["screener"])
+    application.include_router(watchlist_router, prefix="/api", tags=["watchlist"])
+
+    # ── Request-ID middleware ─────────────────────────────────────────────────
+    # Injects an X-Request-ID header into every response (using the incoming
+    # header value if the client sent one, otherwise generating a new UUID).
+    # The ID is stored in request.state so route handlers and background tasks
+    # can attach it to log records for end-to-end trace correlation.
+    @application.middleware("http")
+    async def request_id_middleware(request: Request, call_next) -> Response:
+        req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = req_id
+        response: Response = await call_next(request)
+        response.headers["X-Request-ID"] = req_id
+        return response
 
     # ── Health check ──────────────────────────────────────────────────────────
     # Registered here (inside the factory) so every app instance created by
     # create_app() — including test instances — gets the route.
     @application.get("/health", tags=["health"], summary="Health check")
-    async def health() -> dict[str, str]:
-        """Return a simple status payload confirming the API is reachable."""
-        return {"status": "ok"}
+    async def health() -> dict[str, str | bool]:
+        """
+        Return liveness + DB connectivity status.
+
+        Performs a ``SELECT 1`` against the portfolio database so that a
+        failed or mis-configured database is detected immediately rather than
+        on the first portfolio request.  The container healthcheck in
+        docker-compose.yml calls this endpoint every 30 s.
+        """
+        db_ok = False
+        try:
+            from app.portfolio.database import SessionLocal as _SL
+            from sqlalchemy import text
+
+            with _SL() as _db:
+                _db.execute(text("SELECT 1"))
+            db_ok = True
+        except Exception as _exc:  # noqa: BLE001
+            logger.warning("Health check: DB connectivity failed", extra={"error": str(_exc)})
+
+        return {"status": "ok", "db": db_ok}
 
     return application
 

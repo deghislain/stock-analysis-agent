@@ -1,0 +1,75 @@
+{
+  "_comment": "GICS sector median valuation benchmarks. Values are approximate medians based on broad market data. Update quarterly for accuracy.",
+  "_fields": {
+    "pe": "Trailing P/E ratio median",
+    "pb": "Price-to-Book ratio median",
+    "margin": "Net profit margin median (%)",
+    "revenue_growth": "Revenue growth YoY median (%)"
+  },
+  "Technology": {
+    "pe": 28.0,
+    "pb": 6.5,
+    "margin": 18.0,
+    "revenue_growth": 10.0
+  },
+  "Healthcare": {
+    "pe": 22.0,
+    "pb": 3.8,
+    "margin": 10.0,
+    "revenue_growth": 8.0
+  },
+  "Financials": {
+    "pe": 13.0,
+    "pb": 1.4,
+    "margin": 20.0,
+    "revenue_growth": 5.0
+  },
+  "Consumer Discretionary": {
+    "pe": 24.0,
+    "pb": 4.5,
+    "margin": 6.0,
+    "revenue_growth": 7.0
+  },
+  "Consumer Staples": {
+    "pe": 20.0,
+    "pb": 4.0,
+    "margin": 7.5,
+    "revenue_growth": 4.0
+  },
+  "Industrials": {
+    "pe": 20.0,
+    "pb": 3.5,
+    "margin": 8.0,
+    "revenue_growth": 6.0
+  },
+  "Energy": {
+    "pe": 12.0,
+    "pb": 1.8,
+    "margin": 8.5,
+    "revenue_growth": 3.0
+  },
+  "Materials": {
+    "pe": 16.0,
+    "pb": 2.2,
+    "margin": 8.0,
+    "revenue_growth": 4.0
+  },
+  "Real Estate": {
+    "pe": 30.0,
+    "pb": 1.8,
+    "margin": 20.0,
+    "revenue_growth": 5.0
+  },
+  "Utilities": {
+    "pe": 18.0,
+    "pb": 1.6,
+    "margin": 12.0,
+    "revenue_growth": 3.0
+  },
+  "Communication Services": {
+    "pe": 20.0,
+    "pb": 3.0,
+    "margin": 12.0,
+    "revenue_growth": 6.0
+  }
+}

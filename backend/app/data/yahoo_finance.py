@@ -46,6 +46,14 @@ _COMPANY_INFO_KEYS: tuple[str, ...] = (
     "website",
     "fullTimeEmployees",
     "country",
+    # Analyst targets
+    "targetMeanPrice",
+    "targetLowPrice",
+    "targetHighPrice",
+    "numberOfAnalystOpinions",
+    "recommendationKey",
+    # Insider ownership
+    "heldPercentInsiders",
 )
 
 # Keys pulled from yfinance ``info`` dict into ``financials``.
@@ -58,6 +66,7 @@ _FINANCIALS_KEYS: tuple[str, ...] = (
     "operatingCashflow",
     "freeCashflow",
     "earningsGrowth",
+    "earningsQuarterlyGrowth",
     "revenuePerShare",
 )
 
@@ -145,6 +154,15 @@ class YahooFinanceSource(AbstractDataSource):
 
             # Extract financial summary fields.
             financials = {k: info.get(k) for k in _FINANCIALS_KEYS if info.get(k) is not None}
+
+            # Fetch insider net activity (net shares bought/sold last 6 months).
+            try:
+                txn_df = yf.Ticker(ticker).insider_transactions
+                if txn_df is not None and not txn_df.empty and "Shares" in txn_df.columns:
+                    net_shares = int(txn_df["Shares"].sum())
+                    financials["insider_net_shares_6m"] = net_shares
+            except Exception:  # noqa: BLE001
+                pass  # insider transactions are best-effort; never fatal
 
             if not company_info:
                 warnings.append(

@@ -34,7 +34,8 @@ import TechnicalPanel from '../components/TechnicalPanel'
 import NewsPanel from '../components/NewsPanel'
 import DataSourcesBadge from '../components/DataSourcesBadge'
 import WarningFlags from '../components/WarningFlags'
-import { getPdfUrl } from '../services/api'
+import CoachPanel from '../components/CoachPanel'
+import { getPdfUrl, addToWatchlist } from '../services/api'
 import AddToPortfolioModal from '../components/portfolio/AddToPortfolioModal'
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -45,6 +46,25 @@ export default function Report() {
 
   // Controls the "Add to Portfolio" modal.
   const [addModalOpen, setAddModalOpen] = useState(false)
+  const [watchlistAdded, setWatchlistAdded] = useState(false)
+  const [watchlistError, setWatchlistError] = useState<string | null>(null)
+
+  async function handleAddToWatchlist() {
+    if (!report) return
+    try {
+      await addToWatchlist(report.ticker)
+      setWatchlistAdded(true)
+      setWatchlistError(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to add to watchlist'
+      // 409 = already on watchlist — treat as success
+      if (msg.toLowerCase().includes('already')) {
+        setWatchlistAdded(true)
+      } else {
+        setWatchlistError(msg)
+      }
+    }
+  }
 
   // Pass jobId from the URL directly into useAnalysis so polling starts
   // immediately when this page mounts — even though the mutation that created
@@ -161,6 +181,19 @@ export default function Report() {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {/* "Add to Watchlist" */}
+            <button
+              type="button"
+              onClick={handleAddToWatchlist}
+              disabled={watchlistAdded}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-violet-600 border border-violet-200 hover:bg-violet-50 disabled:opacity-60 transition-colors"
+              title={watchlistAdded ? 'Already on watchlist' : 'Add to Watchlist'}
+            >
+              {watchlistAdded ? '✓ Watchlist' : '+ Watchlist'}
+            </button>
+            {watchlistError && (
+              <span className="text-xs text-red-500">{watchlistError}</span>
+            )}
             {/* "Add to Portfolio" — only visible when report is complete */}
             <button
               type="button"
@@ -214,6 +247,9 @@ export default function Report() {
           newsItems={report.news_items}
           newsSummary={report.news_summary}
         />
+
+        {/* ── Coach panel (Learning Corner) ─────────────────────────────── */}
+        <CoachPanel bullets={report.coach_bullets ?? []} />
 
         {/* ── PDF download (plan requirement: disclaimer must appear here) ─ */}
         <div className="card flex flex-col items-center gap-3 text-center">

@@ -109,7 +109,11 @@ class TestHealthEndpoint:
 
     def test_response_body(self):
         r = self._client.get("/health")
-        assert r.json() == {"status": "ok"}
+        body = r.json()
+        assert body["status"] == "ok"
+        # db key is present and is a boolean (True when SQLite is reachable)
+        assert "db" in body
+        assert isinstance(body["db"], bool)
 
     def test_content_type_is_json(self):
         r = self._client.get("/health")

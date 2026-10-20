@@ -90,8 +90,11 @@ Both are wired into the FastAPI ``lifespan`` context manager in ``app/main.py``.
 """
 
 # Semaphore that caps concurrent orchestrator calls across all refresh jobs.
-# Defined at module level so all concurrent calls share the same limit.
-_refresh_semaphore: asyncio.Semaphore = asyncio.Semaphore(3)
+# Created lazily inside start_scheduler() so it always binds to the running
+# event loop.  Creating asyncio.Semaphore() at module import time (before the
+# event loop exists) can cause a DeprecationWarning in Python 3.10+ and a
+# hard RuntimeError in Python 3.12+ when the loop is started later.
+_refresh_semaphore: asyncio.Semaphore | None = None
 
 
 # ── Public lifecycle helpers ──────────────────────────────────────────────────
@@ -128,9 +131,13 @@ def start_scheduler(
         )
         return
 
-    # Create a fresh scheduler instance each time so it binds to the current
-    # event loop (required for correct behaviour under TestClient which creates
-    # a new event loop per test, and for clean restarts in production).
+    global _refresh_semaphore  # noqa: PLW0603
+
+    # Create both the semaphore and the scheduler fresh each time so they bind
+    # to the current event loop.  Required for correct behaviour under
+    # TestClient (which creates a new event loop per test) and for clean
+    # production restarts.
+    _refresh_semaphore = asyncio.Semaphore(3)
     scheduler = AsyncIOScheduler()
 
     # ── Production schedule ───────────────────────────────────────────────────
@@ -312,11 +319,15 @@ async def run_portfolio_refresh(
     # Map ticker → job_id so we can retrieve results afterwards.
     ticker_to_job_id: dict[str, str] = {}
 
+    # Fallback semaphore for the case where run_portfolio_refresh is called
+    # directly (e.g. manual refresh endpoint) before start_scheduler() has run.
+    semaphore = _refresh_semaphore or asyncio.Semaphore(3)
+
     async def _refresh_one(ticker: str) -> None:
         job_id = str(uuid.uuid4())
         ticker_to_job_id[ticker] = job_id
         job_store.create_job(job_id)
-        async with _refresh_semaphore:
+        async with semaphore:
             try:
                 await orchestrator.run(ticker, job_id)
             except Exception as exc:  # noqa: BLE001

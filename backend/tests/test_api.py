@@ -357,112 +357,142 @@ class TestGetReport:
     # ── Unknown job ───────────────────────────────────────────────────────────
 
     def test_unknown_job_returns_404(self):
-        r = _make_client().get("/api/report/nonexistent-id")
+        # A valid UUID that is not in the job store → 404
+        r = _make_client().get("/api/report/00000000-0000-0000-0000-000000000000")
         assert r.status_code == 404
 
     def test_unknown_job_detail_message(self):
-        r = _make_client().get("/api/report/nonexistent-id")
-        assert "nonexistent-id" in r.json()["detail"]
+        r = _make_client().get("/api/report/00000000-0000-0000-0000-000000000000")
+        assert "00000000-0000-0000-0000-000000000000" in r.json()["detail"]
+
+    def test_invalid_uuid_format_returns_422(self):
+        # A garbage string that is not a UUID → 422 (FastAPI path-param validation)
+        r = _make_client().get("/api/report/not-a-uuid")
+        assert r.status_code == 422
 
     # ── Pending job ───────────────────────────────────────────────────────────
 
     def test_pending_job_returns_200(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-1")
-        r = _make_client(store=store).get("/api/report/job-1")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.status_code == 200
 
     def test_pending_job_returns_status_pending(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-1")
-        r = _make_client(store=store).get("/api/report/job-1")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["status"] == "pending"
 
     def test_pending_job_current_step_is_null(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-1")
-        r = _make_client(store=store).get("/api/report/job-1")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["current_step"] is None
 
     # ── Running job ───────────────────────────────────────────────────────────
 
     def test_running_job_returns_status_running(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-2")
-        store._jobs["job-2"].status = "running"
-        store._jobs["job-2"].current_step = "Analysing fundamentals"
-        r = _make_client(store=store).get("/api/report/job-2")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "running"
+        store._jobs[job_id].current_step = "Analysing fundamentals"
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["status"] == "running"
 
     def test_running_job_returns_current_step(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-2")
-        store._jobs["job-2"].status = "running"
-        store._jobs["job-2"].current_step = "Analysing fundamentals"
-        r = _make_client(store=store).get("/api/report/job-2")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "running"
+        store._jobs[job_id].current_step = "Analysing fundamentals"
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["current_step"] == "Analysing fundamentals"
 
     # ── Error job ─────────────────────────────────────────────────────────────
 
     def test_error_job_returns_status_error(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-3")
-        store._jobs["job-3"].status = "error"
-        store._jobs["job-3"].error = "Unknown ticker"
-        r = _make_client(store=store).get("/api/report/job-3")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "error"
+        store._jobs[job_id].error = "Unknown ticker"
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["status"] == "error"
 
     def test_error_job_returns_error_message(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-3")
-        store._jobs["job-3"].status = "error"
-        store._jobs["job-3"].error = "Unknown ticker"
-        r = _make_client(store=store).get("/api/report/job-3")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "error"
+        store._jobs[job_id].error = "Unknown ticker"
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["error"] == "Unknown ticker"
 
     # ── Complete job ──────────────────────────────────────────────────────────
 
     def test_complete_job_returns_200(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-4")
-        store._jobs["job-4"].status = "complete"
-        store._jobs["job-4"].result = _minimal_report_dict("job-4")
-        r = _make_client(store=store).get("/api/report/job-4")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = _minimal_report_dict(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.status_code == 200
 
     def test_complete_job_returns_report_payload_fields(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-4")
-        store._jobs["job-4"].status = "complete"
-        store._jobs["job-4"].result = _minimal_report_dict("job-4", "AAPL")
-        r = _make_client(store=store).get("/api/report/job-4")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = _minimal_report_dict(job_id, "AAPL")
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         body = r.json()
         assert body["ticker"] == "AAPL"
         assert body["recommendation"] == "Buy"
         assert body["status"] == "complete"
 
     def test_complete_job_contains_disclaimer(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-5")
-        store._jobs["job-5"].status = "complete"
-        store._jobs["job-5"].result = _minimal_report_dict("job-5")
-        r = _make_client(store=store).get("/api/report/job-5")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = _minimal_report_dict(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert "Not financial advice" in r.json()["disclaimer"]
 
     def test_complete_job_news_items_is_list(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-6")
-        store._jobs["job-6"].status = "complete"
-        store._jobs["job-6"].result = _minimal_report_dict("job-6")
-        r = _make_client(store=store).get("/api/report/job-6")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = _minimal_report_dict(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert isinstance(r.json()["news_items"], list)
 
     def test_complete_job_sources_used_is_list(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-6")
-        store._jobs["job-6"].status = "complete"
-        store._jobs["job-6"].result = _minimal_report_dict("job-6")
-        r = _make_client(store=store).get("/api/report/job-6")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = _minimal_report_dict(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert isinstance(r.json()["sources_used"], list)
 
 
@@ -477,116 +507,145 @@ class TestGetReportPdf:
     # ── Unknown / incomplete job ──────────────────────────────────────────────
 
     def test_unknown_job_returns_404(self):
-        r = _make_client().get("/api/report/nonexistent/pdf")
+        # Valid UUID but not in job store → 404
+        r = _make_client().get("/api/report/00000000-0000-0000-0000-000000000099/pdf")
         assert r.status_code == 404
 
     def test_pending_job_returns_404(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-1")
-        r = _make_client(store=store).get("/api/report/job-1/pdf")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
         assert r.status_code == 404
 
     def test_running_job_returns_404(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-2")
-        store._jobs["job-2"].status = "running"
-        r = _make_client(store=store).get("/api/report/job-2/pdf")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "running"
+        r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
         assert r.status_code == 404
 
     def test_error_job_returns_404(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-3")
-        store._jobs["job-3"].status = "error"
-        r = _make_client(store=store).get("/api/report/job-3/pdf")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "error"
+        r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
         assert r.status_code == 404
 
     # ── Complete job, pdf_path is None ────────────────────────────────────────
 
     def test_complete_job_no_pdf_path_returns_404(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-4")
-        store._jobs["job-4"].status = "complete"
-        store._jobs["job-4"].result = _minimal_report_dict("job-4")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = _minimal_report_dict(job_id)
         # pdf_path is None in the minimal dict
-        r = _make_client(store=store).get("/api/report/job-4/pdf")
+        r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
         assert r.status_code == 404
 
     # ── Complete job, pdf_path set but file missing ───────────────────────────
 
     def test_missing_file_on_disk_returns_404(self):
+        import uuid
         store = JobStore()
-        store.create_job("job-5")
-        store._jobs["job-5"].status = "complete"
-        result = _minimal_report_dict("job-5")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        result = _minimal_report_dict(job_id)
         result["pdf_path"] = "/tmp/nonexistent_report.pdf"
-        store._jobs["job-5"].result = result
-        r = _make_client(store=store).get("/api/report/job-5/pdf")
+        store._jobs[job_id].result = result
+        r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
         assert r.status_code == 404
 
     # ── Complete job, pdf file exists ─────────────────────────────────────────
+    # Temp files are created inside settings.pdf_output_dir so they pass the
+    # path-traversal guard added in the production-readiness pass.
 
     def test_existing_pdf_returns_200(self):
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        import uuid
+        from app.config import settings as _s
+        os.makedirs(_s.pdf_output_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=_s.pdf_output_dir) as f:
             f.write(b"%PDF-1.4 fake content")
             pdf_path = f.name
         try:
             store = JobStore()
-            store.create_job("job-6")
-            store._jobs["job-6"].status = "complete"
-            result = _minimal_report_dict("job-6")
+            job_id = str(uuid.uuid4())
+            store.create_job(job_id)
+            store._jobs[job_id].status = "complete"
+            result = _minimal_report_dict(job_id)
             result["pdf_path"] = pdf_path
-            store._jobs["job-6"].result = result
-            r = _make_client(store=store).get("/api/report/job-6/pdf")
+            store._jobs[job_id].result = result
+            r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
             assert r.status_code == 200
         finally:
             os.unlink(pdf_path)
 
     def test_existing_pdf_content_type_is_pdf(self):
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        import uuid
+        from app.config import settings as _s
+        os.makedirs(_s.pdf_output_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=_s.pdf_output_dir) as f:
             f.write(b"%PDF-1.4 fake content")
             pdf_path = f.name
         try:
             store = JobStore()
-            store.create_job("job-7")
-            store._jobs["job-7"].status = "complete"
-            result = _minimal_report_dict("job-7")
+            job_id = str(uuid.uuid4())
+            store.create_job(job_id)
+            store._jobs[job_id].status = "complete"
+            result = _minimal_report_dict(job_id)
             result["pdf_path"] = pdf_path
-            store._jobs["job-7"].result = result
-            r = _make_client(store=store).get("/api/report/job-7/pdf")
+            store._jobs[job_id].result = result
+            r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
             assert "application/pdf" in r.headers["content-type"]
         finally:
             os.unlink(pdf_path)
 
     def test_existing_pdf_content_disposition_attachment(self):
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        import uuid
+        from app.config import settings as _s
+        os.makedirs(_s.pdf_output_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=_s.pdf_output_dir) as f:
             f.write(b"%PDF-1.4 fake content")
             pdf_path = f.name
         try:
             store = JobStore()
-            store.create_job("job-8")
-            store._jobs["job-8"].status = "complete"
-            result = _minimal_report_dict("job-8")
+            job_id = str(uuid.uuid4())
+            store.create_job(job_id)
+            store._jobs[job_id].status = "complete"
+            result = _minimal_report_dict(job_id)
             result["pdf_path"] = pdf_path
-            store._jobs["job-8"].result = result
-            r = _make_client(store=store).get("/api/report/job-8/pdf")
+            store._jobs[job_id].result = result
+            r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
             assert "attachment" in r.headers.get("content-disposition", "")
         finally:
             os.unlink(pdf_path)
 
     def test_existing_pdf_filename_matches_basename(self):
+        import uuid
+        from app.config import settings as _s
+        os.makedirs(_s.pdf_output_dir, exist_ok=True)
         with tempfile.NamedTemporaryFile(
-            suffix=".pdf", prefix="AAPL_", delete=False
+            suffix=".pdf", prefix="AAPL_", delete=False, dir=_s.pdf_output_dir
         ) as f:
             f.write(b"%PDF-1.4 fake content")
             pdf_path = f.name
         try:
             store = JobStore()
-            store.create_job("job-9")
-            store._jobs["job-9"].status = "complete"
-            result = _minimal_report_dict("job-9")
+            job_id = str(uuid.uuid4())
+            store.create_job(job_id)
+            store._jobs[job_id].status = "complete"
+            result = _minimal_report_dict(job_id)
             result["pdf_path"] = pdf_path
-            store._jobs["job-9"].result = result
-            r = _make_client(store=store).get("/api/report/job-9/pdf")
+            store._jobs[job_id].result = result
+            r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
             expected_name = os.path.basename(pdf_path)
             assert expected_name in r.headers.get("content-disposition", "")
         finally:
@@ -668,21 +727,25 @@ class TestGetReportPayloadInstance:
     """
 
     def test_complete_job_with_model_instance_returns_200(self):
+        import uuid
         from app.schemas.report import ReportPayload
         store = JobStore()
-        store.create_job("job-m1")
-        store._jobs["job-m1"].status = "complete"
-        store._jobs["job-m1"].result = ReportPayload(**_minimal_report_dict("job-m1"))
-        r = _make_client(store=store).get("/api/report/job-m1")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = ReportPayload(**_minimal_report_dict(job_id))
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.status_code == 200
 
     def test_complete_job_with_model_instance_fields_serialised(self):
+        import uuid
         from app.schemas.report import ReportPayload
         store = JobStore()
-        store.create_job("job-m2")
-        store._jobs["job-m2"].status = "complete"
-        store._jobs["job-m2"].result = ReportPayload(**_minimal_report_dict("job-m2", "TSLA"))
-        r = _make_client(store=store).get("/api/report/job-m2")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = ReportPayload(**_minimal_report_dict(job_id, "TSLA"))
+        r = _make_client(store=store).get(f"/api/report/{job_id}")
         assert r.json()["ticker"] == "TSLA"
 
 
@@ -699,29 +762,35 @@ class TestGetReportPdfPayloadInstance:
 
     def test_pdf_path_none_on_model_instance_returns_404(self):
         """pdf_path=None on a ReportPayload instance → 404."""
+        import uuid
         from app.schemas.report import ReportPayload
         store = JobStore()
-        store.create_job("job-p1")
-        store._jobs["job-p1"].status = "complete"
-        store._jobs["job-p1"].result = ReportPayload(**_minimal_report_dict("job-p1"))
-        r = _make_client(store=store).get("/api/report/job-p1/pdf")
+        job_id = str(uuid.uuid4())
+        store.create_job(job_id)
+        store._jobs[job_id].status = "complete"
+        store._jobs[job_id].result = ReportPayload(**_minimal_report_dict(job_id))
+        r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
         assert r.status_code == 404
 
     def test_pdf_path_set_on_model_instance_serves_file(self):
         """pdf_path set on a ReportPayload instance → FileResponse."""
-        from app.schemas.report import ReportPayload
+        import uuid
         import tempfile, os
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        from app.config import settings as _s
+        from app.schemas.report import ReportPayload
+        os.makedirs(_s.pdf_output_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=_s.pdf_output_dir) as f:
             f.write(b"%PDF-1.4 fake")
             pdf_path = f.name
         try:
-            d = _minimal_report_dict("job-p2")
+            job_id = str(uuid.uuid4())
+            d = _minimal_report_dict(job_id)
             d["pdf_path"] = pdf_path
             store = JobStore()
-            store.create_job("job-p2")
-            store._jobs["job-p2"].status = "complete"
-            store._jobs["job-p2"].result = ReportPayload(**d)
-            r = _make_client(store=store).get("/api/report/job-p2/pdf")
+            store.create_job(job_id)
+            store._jobs[job_id].status = "complete"
+            store._jobs[job_id].result = ReportPayload(**d)
+            r = _make_client(store=store).get(f"/api/report/{job_id}/pdf")
             assert r.status_code == 200
             assert "application/pdf" in r.headers["content-type"]
         finally:

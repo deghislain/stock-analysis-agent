@@ -28,6 +28,7 @@ import type {
   JobStatusResponse,
   ReportPayload,
   ValidateResponse,
+  WatchlistList,
 } from '../types'
 
 // ── Shared Axios instance ──────────────────────────────────────────────────────
@@ -143,4 +144,22 @@ export async function getReport(
  */
 export function getPdfUrl(jobId: string): string {
   return `/api/report/${encodeURIComponent(jobId)}/pdf`
+}
+
+// ── Watchlist API ─────────────────────────────────────────────────────────────
+
+/** Fetch all watchlist entries. GET /api/watchlist */
+export async function getWatchlist(): Promise<WatchlistList> {
+  const res = await client.get<WatchlistList>('/api/watchlist')
+  return res.data
+}
+
+/** Add a ticker to the watchlist. POST /api/watchlist/{ticker} */
+export async function addToWatchlist(ticker: string): Promise<void> {
+  await client.post(`/api/watchlist/${encodeURIComponent(ticker)}`)
+}
+
+/** Remove a ticker from the watchlist. DELETE /api/watchlist/{ticker} */
+export async function removeFromWatchlist(ticker: string): Promise<void> {
+  await client.delete(`/api/watchlist/${encodeURIComponent(ticker)}`)
 }

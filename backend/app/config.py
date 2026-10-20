@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -107,6 +107,156 @@ class Settings(BaseSettings):
             "from firing background analysis jobs automatically."
         ),
     )
+
+    # ── Scoring thresholds ────────────────────────────────────────────────────
+    # These control the break-points used in the fundamental and technical
+    # scoring functions. Override via environment variables to tune the model
+    # without touching source code.
+
+    fundamental_pe_thresholds: str = Field(
+        default="15,25,40",
+        description=(
+            "Comma-separated P/E ratio break-points (low,mid,high). "
+            "Scores: below low→100, low–mid→70, mid–high→45, above high→20."
+        ),
+    )
+
+    fundamental_pb_thresholds: str = Field(
+        default="1,3,10",
+        description=(
+            "Comma-separated P/B ratio break-points (low,mid,high). "
+            "Scores: negative→10, below low→100, low–mid→75, mid–high→45, above high→15."
+        ),
+    )
+
+    fundamental_de_thresholds: str = Field(
+        default="0.5,1,2",
+        description=(
+            "Comma-separated Debt/Equity break-points (low,mid,high). "
+            "Scores: below low→100, low–mid→75, mid–high→50, above high→20."
+        ),
+    )
+
+    fundamental_margin_thresholds: str = Field(
+        default="0,10,20",
+        description=(
+            "Comma-separated net profit margin break-points in % (zero,mid,high). "
+            "Scores: above high→100, mid–high→75, zero–mid→45, negative→10."
+        ),
+    )
+
+    fundamental_revenue_growth_thresholds: str = Field(
+        default="0,5,15",
+        description=(
+            "Comma-separated revenue growth break-points in % (zero,mid,high). "
+            "Scores: above high→100, mid–high→75, zero–mid→50, negative→20."
+        ),
+    )
+
+    technical_rsi_bands: str = Field(
+        default="30,45,55,70",
+        description=(
+            "Comma-separated RSI band boundaries (oversold,low,high,overbought). "
+            "Scores: below oversold→0.85, oversold–low→0.70, low–high→0.50, "
+            "high–overbought→0.35, above overbought→0.20."
+        ),
+    )
+
+    technical_signal_weights: str = Field(
+        default="25,25,20,15,15",
+        description=(
+            "Comma-separated weights for technical signals "
+            "(RSI, MACD, SMA20, SMA50, SMA200). Must sum to 100."
+        ),
+    )
+
+    # ── Composite score weights ───────────────────────────────────────────────
+    # These three weights must sum to 1.0.  They control how much each analysis
+    # dimension contributes to the final overall_score that drives the
+    # Buy / Hold / Sell recommendation.
+
+    score_weight_fundamental: float = Field(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Weight given to the fundamental score in the composite score (0–1).",
+    )
+
+    score_weight_technical: float = Field(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Weight given to the technical score in the composite score (0–1).",
+    )
+
+    score_weight_sentiment: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Weight given to the sentiment score in the composite score (0–1).",
+    )
+
+    @field_validator(
+        "fundamental_pe_thresholds",
+        "fundamental_pb_thresholds",
+        "fundamental_de_thresholds",
+        "fundamental_margin_thresholds",
+        "fundamental_revenue_growth_thresholds",
+        "technical_rsi_bands",
+        "technical_signal_weights",
+        mode="before",
+    )
+    @classmethod
+    def _validate_numeric_csv(cls, v: str) -> str:
+        """Ensure the value is a comma-separated list of numbers."""
+        for part in str(v).split(","):
+            try:
+                float(part.strip())
+            except ValueError:
+                raise ValueError(
+                    f"Expected comma-separated numbers, got: {v!r}"
+                )
+        return str(v)
+
+    def _parse_thresholds(self, raw: str) -> list[float]:
+        """Parse a comma-separated threshold string into a sorted list of floats."""
+        return sorted(float(x.strip()) for x in raw.split(","))
+
+    @property
+    def pe_thresholds(self) -> list[float]:
+        """Parsed P/E thresholds [low, mid, high]."""
+        return self._parse_thresholds(self.fundamental_pe_thresholds)
+
+    @property
+    def pb_thresholds(self) -> list[float]:
+        """Parsed P/B thresholds [low, mid, high]."""
+        return self._parse_thresholds(self.fundamental_pb_thresholds)
+
+    @property
+    def de_thresholds(self) -> list[float]:
+        """Parsed D/E thresholds [low, mid, high]."""
+        return self._parse_thresholds(self.fundamental_de_thresholds)
+
+    @property
+    def margin_thresholds(self) -> list[float]:
+        """Parsed profit margin thresholds in % [zero, mid, high]."""
+        return self._parse_thresholds(self.fundamental_margin_thresholds)
+
+    @property
+    def revenue_growth_thresholds(self) -> list[float]:
+        """Parsed revenue growth thresholds in % [zero, mid, high]."""
+        return self._parse_thresholds(self.fundamental_revenue_growth_thresholds)
+
+    @property
+    def rsi_bands(self) -> list[float]:
+        """Parsed RSI band boundaries [oversold, low, high, overbought]."""
+        return self._parse_thresholds(self.technical_rsi_bands)
+
+    @property
+    def signal_weights(self) -> list[float]:
+        """Parsed technical signal weights [RSI, MACD, SMA20, SMA50, SMA200]."""
+        parts = [float(x.strip()) for x in self.technical_signal_weights.split(",")]
+        return parts
 
 
 # Module-level singleton — import this everywhere instead of instantiating Settings() directly.

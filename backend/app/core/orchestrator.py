@@ -18,7 +18,8 @@ Pipeline steps (in order)
 
 Scoring & recommendation
 ────────────────────────
-  overall_score = fundamental * 0.40 + technical * 0.40 + sentiment * 0.20
+  overall_score = fundamental * W_F + technical * W_T + sentiment * W_S
+  (weights default to 0.40 / 0.40 / 0.20; tunable via SCORE_WEIGHT_* env vars)
   >= 60  → "Buy"
   40–59  → "Hold"
   < 40   → "Sell"
@@ -83,10 +84,8 @@ _DISCLAIMER = (
 _BUY_THRESHOLD  = 60.0
 _SELL_THRESHOLD = 40.0
 
-# Weights for the composite score.
-_W_FUNDAMENTAL = 0.40
-_W_TECHNICAL   = 0.40
-_W_SENTIMENT   = 0.20
+# Weights are read from settings so they can be tuned without touching source.
+# See config.py `score_weight_fundamental`, `score_weight_technical`, `score_weight_sentiment`.
 
 
 class Orchestrator:
@@ -171,7 +170,9 @@ class Orchestrator:
             )
 
         except Exception as exc:  # noqa: BLE001
-            error_msg = str(exc)
+            # Truncate the error message so a huge stack trace or external API
+            # response body never causes an OOM write into the job store / DB.
+            error_msg = str(exc)[:1000]
             logger.error(
                 "Orchestrator failed",
                 extra={"ticker": ticker, "job_id": job_id, "error": error_msg},
@@ -327,6 +328,7 @@ class Orchestrator:
             "sentiment_result":        sentiment_result,
             "news_items":              news_items,
             "news_summary":            report_result.get("news_summary", ""),
+            "coach_bullets":           report_result.get("coach_bullets", []),
             "fundamental_explanation": report_result.get("fundamental_explanation", ""),
             "technical_explanation":   report_result.get("technical_explanation", ""),
             "sources_used":            sources_used,
@@ -360,12 +362,15 @@ def _compute_overall_score(
     """
     Compute the weighted composite score (0–100).
 
-    Weights: fundamental 40 %, technical 40 %, sentiment 20 %.
+    Weights are read from ``settings`` so they can be tuned via environment
+    variables (``SCORE_WEIGHT_FUNDAMENTAL``, ``SCORE_WEIGHT_TECHNICAL``,
+    ``SCORE_WEIGHT_SENTIMENT``) without touching source code.
+    Default: fundamental 40 %, technical 40 %, sentiment 20 %.
     """
     raw = (
-        fundamental_score * _W_FUNDAMENTAL
-        + technical_score * _W_TECHNICAL
-        + sentiment_score * _W_SENTIMENT
+        fundamental_score * settings.score_weight_fundamental
+        + technical_score * settings.score_weight_technical
+        + sentiment_score * settings.score_weight_sentiment
     )
     return round(max(0.0, min(100.0, raw)), 2)
 

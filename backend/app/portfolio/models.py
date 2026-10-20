@@ -340,6 +340,38 @@ class RankingEntry(Base):
     """The parent ``RankingSnapshot`` this entry belongs to."""
 
 
+# ── Watchlist ─────────────────────────────────────────────────────────────────
+
+
+class WatchlistEntry(Base):
+    """
+    A single ticker on the user's watchlist.
+
+    Stores the most recent analysis score and recommendation so the watchlist
+    comparison table can be rendered without hitting the job store.
+    """
+
+    __tablename__ = "watchlist"
+
+    ticker: str = Column(String(10), primary_key=True)
+    """Upper-case ticker symbol — primary key (watchlist has one row per ticker)."""
+
+    added_at: datetime = Column(DateTime, default=datetime.utcnow)
+    """UTC datetime when this ticker was added to the watchlist."""
+
+    last_analysed_at: datetime | None = Column(DateTime, nullable=True)
+    """UTC datetime of the most recent completed analysis for this ticker."""
+
+    overall_score: float | None = Column(Float, nullable=True)
+    """Latest composite overall score (0–100), or ``None`` if never analysed."""
+
+    recommendation: str | None = Column(String(10), nullable=True)
+    """Latest recommendation: ``"Buy"``, ``"Hold"``, or ``"Sell"``; ``None`` if never analysed."""
+
+    latest_job_id: str | None = Column(String, nullable=True)
+    """UUID of the most recent completed analysis job for this ticker."""
+
+
 # ── ReportCache ───────────────────────────────────────────────────────────────
 
 

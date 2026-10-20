@@ -47,7 +47,7 @@ logger = get_logger(__name__)
 
 # ── Fallback template (plan §"Groq LLM fallback template") ───────────────────
 
-GROQ_FALLBACK_TEMPLATE: dict[str, str] = {
+GROQ_FALLBACK_TEMPLATE: dict = {
     "recommendation": "Hold",
     "rationale": (
         "Automated narrative generation is temporarily unavailable. "
@@ -63,6 +63,10 @@ GROQ_FALLBACK_TEMPLATE: dict[str, str] = {
     "news_summary": (
         "News summary unavailable. See the raw headlines below."
     ),
+    "coach_bullets": [
+        "Review the key metrics in the Fundamentals panel to understand how the company is performing financially.",
+        "Check the Technical panel to see whether the stock's recent price trend is moving up or down.",
+    ],
 }
 
 # Warning added to the payload whenever the fallback is used.
@@ -150,6 +154,7 @@ class ReportAgent(BaseAgent):
             "fundamental_explanation": parsed.get("fundamental_explanation", GROQ_FALLBACK_TEMPLATE["fundamental_explanation"]),
             "technical_explanation":   parsed.get("technical_explanation",   GROQ_FALLBACK_TEMPLATE["technical_explanation"]),
             "news_summary":            parsed.get("news_summary",            GROQ_FALLBACK_TEMPLATE["news_summary"]),
+            "coach_bullets":           parsed.get("coach_bullets",           GROQ_FALLBACK_TEMPLATE["coach_bullets"]),
             "warnings":                warnings,
         }
 
@@ -180,14 +185,46 @@ def _build_prompt(ar: AnalysisResult, news_items: list[dict] | None = None) -> s
             return default
         return f"{v}{unit}"
 
+    # Format PEG ratio line.
+    peg_line = _fmt(fund.peg_ratio, "x") if fund.peg_ratio is not None else "N/A"
+
+    # Format analyst consensus.
+    at = fund.analyst_targets
+    analyst_line = (
+        f"consensus={at.consensus}, mean target={_fmt(at.mean_target, '$')}, "
+        f"analysts={at.analyst_count}"
+        if at is not None else "N/A"
+    )
+
+    # Format insider signals.
+    insider_line = (
+        f"ownership={_fmt(fund.insider_ownership_pct, '%')}, "
+        f"activity={fund.insider_net_activity or 'N/A'}"
+        if fund.insider_ownership_pct is not None else "N/A"
+    )
+
+    # Format sector comparison.
+    sc = fund.sector_comparison
+    sector_line = (
+        f"sector={sc.sector}, P/E={sc.pe_vs_sector or 'N/A'}, "
+        f"P/B={sc.pb_vs_sector or 'N/A'}, margin={sc.margin_vs_sector or 'N/A'}, "
+        f"growth={sc.growth_vs_sector or 'N/A'}"
+        if sc is not None else "N/A"
+    )
+
     fundamental_section = (
-        f"  P/E ratio:       {_fmt(fund.pe_ratio.value, 'x')}\n"
-        f"  EPS:             {_fmt(fund.eps.value, '$')}\n"
-        f"  P/B ratio:       {_fmt(fund.pb_ratio.value, 'x')}\n"
-        f"  Debt/Equity:     {_fmt(fund.debt_to_equity.value, 'x')}\n"
-        f"  Profit margin:   {_fmt(fund.profit_margin.value, '%')}\n"
-        f"  Revenue growth:  {_fmt(fund.revenue_growth.value, '%')}\n"
-        f"  Dividend yield:  {_fmt(fund.dividend_yield.value, '%')}\n"
+        f"  P/E ratio:         {_fmt(fund.pe_ratio.value, 'x')}\n"
+        f"  EPS:               {_fmt(fund.eps.value, '$')}\n"
+        f"  P/B ratio:         {_fmt(fund.pb_ratio.value, 'x')}\n"
+        f"  Debt/Equity:       {_fmt(fund.debt_to_equity.value, 'x')}\n"
+        f"  Profit margin:     {_fmt(fund.profit_margin.value, '%')}\n"
+        f"  Revenue growth:    {_fmt(fund.revenue_growth.value, '%')}\n"
+        f"  Dividend yield:    {_fmt(fund.dividend_yield.value, '%')}\n"
+        f"  PEG ratio:         {peg_line}\n"
+        f"  Growth quality:    {_fmt(fund.growth_quality_score, '/100')}\n"
+        f"  Analyst targets:   {analyst_line}\n"
+        f"  Insider signals:   {insider_line}\n"
+        f"  Sector comparison: {sector_line}\n"
         f"  Fundamental score: {fund.score}/100"
     )
 
@@ -251,11 +288,13 @@ Respond with ONLY this JSON object — no markdown, no extra text:
   "rationale":               "<exactly 3 sentences explaining the recommendation>",
   "fundamental_explanation": "<plain-language explanation of the fundamentals, max 150 words>",
   "technical_explanation":   "<plain-language explanation of the technical indicators, max 150 words>",
-  "news_summary":            "<2–3 sentence prose summary of the recent news headlines above, max 80 words>"
+  "news_summary":            "<2–3 sentence prose summary of the recent news headlines above, max 80 words>",
+  "coach_bullets":           ["<jargon-free tip 1 for a complete beginner>", "<tip 2>", "<tip 3>"]
 }}
 
 Important rules:
 - recommendation must be exactly one of: Buy, Hold, Sell
+- coach_bullets must be an array of 2–4 strings, written for someone who has never invested before
 - Do NOT include the disclaimer in the JSON values
 - Write for a complete beginner — avoid jargon, explain any terms you use
 - For informational purposes only. Not financial advice."""

@@ -558,3 +558,78 @@ def get_report_cache(db: Session, job_id: str) -> ReportCache | None:
         The matching row, or ``None`` when not found.
     """
     return db.get(ReportCache, job_id)
+
+
+# ── Watchlist ─────────────────────────────────────────────────────────────────
+
+
+def get_watchlist(db: Session) -> list:
+    """Return all watchlist entries ordered by overall_score descending."""
+    from app.portfolio.models import WatchlistEntry
+
+    return (
+        db.query(WatchlistEntry)
+        .order_by(
+            WatchlistEntry.overall_score.desc().nullslast(),
+            WatchlistEntry.added_at.asc(),
+        )
+        .all()
+    )
+
+
+def add_to_watchlist(db: Session, ticker: str) -> tuple:
+    """
+    Add ``ticker`` to the watchlist if it is not already present.
+
+    Returns ``(entry, created)`` where ``created`` is ``True`` when a new row
+    was inserted and ``False`` when the ticker was already on the watchlist.
+    """
+    from app.portfolio.models import WatchlistEntry
+
+    existing = db.get(WatchlistEntry, ticker.upper())
+    if existing is not None:
+        return existing, False
+
+    entry = WatchlistEntry(ticker=ticker.upper())
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry, True
+
+
+def remove_from_watchlist(db: Session, ticker: str) -> bool:
+    """
+    Remove ``ticker`` from the watchlist.
+
+    Returns ``True`` when found and deleted; ``False`` when not found.
+    """
+    from app.portfolio.models import WatchlistEntry
+
+    entry = db.get(WatchlistEntry, ticker.upper())
+    if entry is None:
+        return False
+    db.delete(entry)
+    db.commit()
+    return True
+
+
+def update_watchlist_entry(
+    db: Session,
+    ticker: str,
+    overall_score: float | None,
+    recommendation: str | None,
+    job_id: str,
+) -> None:
+    """Update the cached score/recommendation fields for a watchlist entry."""
+    from datetime import datetime
+
+    from app.portfolio.models import WatchlistEntry
+
+    entry = db.get(WatchlistEntry, ticker.upper())
+    if entry is None:
+        return
+    entry.overall_score = overall_score
+    entry.recommendation = recommendation
+    entry.latest_job_id = job_id
+    entry.last_analysed_at = datetime.utcnow()
+    db.commit()

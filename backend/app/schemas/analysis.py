@@ -58,6 +58,60 @@ class FundamentalMetric(BaseModel):
     model_config = {"frozen": True}
 
 
+# ── Analyst Targets ───────────────────────────────────────────────────────────
+
+
+class AnalystTargets(BaseModel):
+    """Analyst consensus price targets and recommendation for a ticker."""
+
+    mean_target: Optional[float] = None
+    """Consensus mean price target across all covering analysts."""
+
+    low_target: Optional[float] = None
+    """Lowest individual analyst price target."""
+
+    high_target: Optional[float] = None
+    """Highest individual analyst price target."""
+
+    analyst_count: Optional[int] = None
+    """Number of analysts that have published a target."""
+
+    consensus: Optional[str] = None
+    """
+    Consensus recommendation label from Yahoo Finance
+    (e.g. ``"strongBuy"``, ``"buy"``, ``"hold"``, ``"sell"``, ``"strongSell"``).
+    """
+
+    model_config = {"frozen": True}
+
+
+# ── Sector Comparison ──────────────────────────────────────────────────────────
+
+
+class SectorComparison(BaseModel):
+    """How a stock's key multiples compare to its sector median."""
+
+    sector: str
+    """GICS sector name (e.g. ``"Technology"``)."""
+
+    pe_vs_sector: Optional[str] = None
+    """``"Above"``, ``"Below"``, or ``"In-line"`` relative to sector median P/E."""
+
+    pb_vs_sector: Optional[str] = None
+    """``"Above"``, ``"Below"``, or ``"In-line"`` relative to sector median P/B."""
+
+    margin_vs_sector: Optional[str] = None
+    """``"Above"``, ``"Below"``, or ``"In-line"`` relative to sector median profit margin."""
+
+    growth_vs_sector: Optional[str] = None
+    """``"Above"``, ``"Below"``, or ``"In-line"`` relative to sector median revenue growth."""
+
+    model_config = {"frozen": True}
+
+
+# ── FundamentalResult ─────────────────────────────────────────────────────────
+
+
 class FundamentalResult(BaseModel):
     """Output of ``FundamentalAnalyser.analyse()`` for a single ticker."""
 
@@ -84,6 +138,48 @@ class FundamentalResult(BaseModel):
 
     dividend_yield: FundamentalMetric
     """Annual dividend as a percentage of the current share price."""
+
+    # ── New investor signals ──────────────────────────────────────────────────
+
+    growth_quality_score: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    """
+    Growth Quality Score (0–100): rewards profitable, cash-generative growth.
+
+    Combines revenue growth score, profit margin score, free-cash-flow positivity,
+    and debt-direction bonus.  Higher = more sustainable growth.  ``None`` when
+    insufficient data is available.
+    """
+
+    peg_ratio: Optional[float] = None
+    """
+    Price/Earnings-to-Growth ratio (P/E ÷ EPS growth rate).
+
+    PEG < 1 is commonly considered undervalued relative to growth.
+    ``None`` when P/E or EPS growth is unavailable or when EPS growth is ≤ 0.
+    """
+
+    analyst_targets: Optional[AnalystTargets] = None
+    """Analyst consensus price targets and recommendation, when available."""
+
+    insider_ownership_pct: Optional[float] = None
+    """
+    Percentage of shares held by company insiders (0–100 %).
+
+    Higher insider ownership typically signals management confidence in the business.
+    ``None`` when the data is unavailable.
+    """
+
+    insider_net_activity: Optional[str] = None
+    """
+    Net insider trading activity over the past ~6 months.
+
+    One of ``"Net Buying"`` (insiders bought more than they sold),
+    ``"Net Selling"``, ``"Neutral"`` (negligible net movement), or ``None``
+    when transaction data is unavailable.
+    """
+
+    sector_comparison: Optional[SectorComparison] = None
+    """How the stock's multiples compare to its GICS sector median, when available."""
 
     score: float = Field(ge=0.0, le=100.0)
     """

@@ -22,8 +22,10 @@ Behaviour summary
 from __future__ import annotations
 
 import os
+from pathlib import Path as FSPath
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi import status as http_status
 from fastapi.responses import FileResponse
 
@@ -56,7 +58,7 @@ router = APIRouter()
     # Pydantic model the handler returns.
 )
 async def get_report(
-    job_id: str,
+    job_id: UUID = Path(..., description="UUID of the analysis job to retrieve"),
     store: JobStore = Depends(get_job_store),
     db: Session = Depends(get_db),
 ) -> JobStatusResponse | ReportPayload:
@@ -68,12 +70,13 @@ async def get_report(
     - Unknown ``job_id`` in memory but found in DB cache → ``ReportPayload``
     - Unknown ``job_id`` → HTTP 404
     """
-    job = store.get_job(job_id)
+    job_id_str = str(job_id)
+    job = store.get_job(job_id_str)
 
     if job is None:
         # The in-memory JobStore was cleared (server restart).
         # Fall back to the persistent report cache in the database.
-        cached = crud.get_report_cache(db, job_id)
+        cached = crud.get_report_cache(db, job_id_str)
         if cached is not None:
             logger.debug(
                 "Serving report from DB cache (job not in memory)",
@@ -83,7 +86,7 @@ async def get_report(
 
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Job '{job_id}' not found.",
+            detail=f"Job '{job_id_str}' not found.",
         )
 
     if job.status == "complete":
@@ -116,7 +119,7 @@ async def get_report(
     response_class=FileResponse,
 )
 async def get_report_pdf(
-    job_id: str,
+    job_id: UUID = Path(..., description="UUID of the analysis job whose PDF to download"),
     store: JobStore = Depends(get_job_store),
     db: Session = Depends(get_db),
 ) -> FileResponse:
@@ -128,16 +131,17 @@ async def get_report_pdf(
     - ``pdf_path`` is ``None`` or file no longer on disk → HTTP 404
     - Otherwise → ``FileResponse`` (``application/pdf``, attachment)
     """
-    job = store.get_job(job_id)
+    job_id_str = str(job_id)
+    job = store.get_job(job_id_str)
     pdf_path: str | None = None
 
     if job is None:
         # Fall back to the persistent DB cache (server may have restarted).
-        cached = crud.get_report_cache(db, job_id)
+        cached = crud.get_report_cache(db, job_id_str)
         if cached is None:
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
-                detail=f"Job '{job_id}' not found.",
+                detail=f"Job '{job_id_str}' not found.",
             )
         cached_payload = ReportPayload.model_validate_json(cached.payload_json)
         pdf_path = cached_payload.pdf_path
@@ -146,7 +150,7 @@ async def get_report_pdf(
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
                 detail=(
-                    f"PDF is not available: job '{job_id}' has status '{job.status}'. "
+                    f"PDF is not available: job '{job_id_str}' has status '{job.status}'. "
                     "Wait until the job is complete before downloading the PDF."
                 ),
             )
@@ -161,7 +165,24 @@ async def get_report_pdf(
     if not pdf_path:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"PDF has not been generated for job '{job_id}' yet.",
+            detail=f"PDF has not been generated for job '{job_id_str}' yet.",
+        )
+
+    # ── Path-traversal guard ──────────────────────────────────────────────────
+    # pdf_path comes from DB-stored data; verify it resolves inside the
+    # configured output directory before serving the file.
+    from app.config import settings as _settings  # local import avoids circularity
+
+    resolved = FSPath(pdf_path).resolve()
+    allowed_dir = FSPath(_settings.pdf_output_dir).resolve()
+    if not str(resolved).startswith(str(allowed_dir) + os.sep) and resolved != allowed_dir:
+        logger.warning(
+            "PDF path outside allowed directory — refusing to serve",
+            extra={"job_id": job_id, "pdf_path": pdf_path, "resolved": str(resolved)},
+        )
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="PDF file is no longer available (it may have been cleaned up).",
         )
 
     if not os.path.isfile(pdf_path):
